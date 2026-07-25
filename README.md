@@ -1,1 +1,139 @@
-# sasmoney
+# SasMoney
+
+Aplicación web para que tus trabajadoras apunten los clientes que hacen y lo que cobran,
+y para que tú, como jefe, veas de un botón **cuánto le tienes que pagar a cada una**.
+
+Pensada para usarse desde el móvil: apuntar un cobro son dos toques.
+
+---
+
+## Cómo funciona
+
+### Para la trabajadora
+
+1. Entra con su usuario y su contraseña.
+2. Escribe **el importe** y pulsa *Apuntar cobro*. Ya está.
+   - El pueblo aparece ya marcado (el último que usó).
+   - Los importes que más repite salen como botones, para no escribir.
+   - El nombre del cliente es **opcional**: si lo deja vacío se numera solo
+     (*Cliente 1*, *Cliente 2*…). Si quiere, puede poner un nombre o un mote.
+   - La fecha, el método de pago y las notas están escondidos en *Más detalles*,
+     porque casi nunca hacen falta.
+3. En *Mis ganancias* ve en todo momento lo que lleva ganado ese mes y cómo sale la cuenta.
+
+### Para el jefe
+
+- **Resumen**: lo facturado del mes, lo que se llevan ellas y lo que queda para la empresa.
+- **Liquidación**: eliges el periodo (un mes entero o dos fechas sueltas), pulsas
+  *Calcular lo que tengo que pagar* y te sale la cifra de cada trabajadora con su desglose.
+  Al pagarle, pulsas *Marcar como pagado*: esos servicios quedan cerrados y ya no se
+  cuentan otra vez el mes siguiente ni se pueden tocar.
+- **Trabajadores**: das de alta a cada una, le pones su usuario y su contraseña, y decides
+  cuánto se lleva.
+- **Servicios**: todos los cobros, con filtros y descarga en CSV (se abre con Excel).
+- **Pueblos**: la lista de pueblos que ellas eligen al apuntar.
+
+## Las tres formas de pagar a una trabajadora
+
+Cada trabajadora tiene su propia regla y la cambias cuando quieras:
+
+| Tipo | Qué hace | Ejemplo |
+|---|---|---|
+| **Un porcentaje** | Se lleva ese % de todo lo que factura | 40 % → factura 1.000 €, cobra 400 € |
+| **Varios porcentajes por tramos** | El % sube según lo que facture | 0 € → 30 %, 2.000 € → 35 %, 4.000 € → 40 % |
+| **Cantidad fija por servicio** | Cobra lo mismo por cada cliente | 15 € por cliente → 20 clientes, 300 € |
+
+En los tramos puedes elegir cómo se aplican:
+
+- **Sobre el total** (lo normal): si llega a 2.000 €, el 35 % se aplica a **todo**.
+  Factura 3.400 € → 3.400 × 35 % = **1.190 €**.
+- **Progresivo**: cada tramo cobra su % sólo sobre su parte.
+  Factura 3.400 € → 2.000 × 30 % + 1.400 × 40 % = **1.160 €**.
+
+Puedes poner tantos tramos como quieras, no sólo tres.
+
+---
+
+## Ponerla en marcha
+
+Hace falta Node.js 20.12 o superior.
+
+```bash
+npm install
+npm start
+```
+
+Abre <http://localhost:3000>. La primera vez se crea el usuario administrador y la
+contraseña se imprime en la consola (por defecto `admin` / `cambiar123`).
+**Cámbiala nada más entrar**: la aplicación te avisa con una banda amarilla hasta que lo hagas.
+
+### Configuración
+
+Todo es opcional; si no pones nada, funciona con los valores por defecto.
+Puedes crear un fichero `.env` (mira `.env.example`) o poner las variables en tu servidor.
+
+| Variable | Para qué | Por defecto |
+|---|---|---|
+| `PORT` | Puerto donde escucha | `3000` |
+| `DATA_DIR` | Carpeta donde se guarda la base de datos | `./data` |
+| `DB_FILE` | Ruta completa del fichero de base de datos | `<DATA_DIR>/sasmoney.db` |
+| `ADMIN_USER` | Usuario del jefe (sólo al crear la base de datos) | `admin` |
+| `ADMIN_PASSWORD` | Su contraseña (sólo al crear la base de datos) | `cambiar123` |
+| `TZ_APP` | Zona horaria del negocio | `Europe/Madrid` |
+| `COOKIE_SECURE` | Pon `1` cuando la sirvas por HTTPS | apagado |
+| `SESSION_DAYS` | Días que dura la sesión sin volver a entrar | `30` |
+
+### Subirla a internet
+
+Los datos viven en un único fichero SQLite dentro de `DATA_DIR`. Cualquier servidor que te
+deje montar un disco persistente vale (Railway, Render, Fly.io, un VPS…):
+
+1. Monta un disco persistente y apunta `DATA_DIR` a él (por ejemplo `/data`).
+2. Pon `COOKIE_SECURE=1` y `ADMIN_PASSWORD` con una contraseña tuya.
+3. Arranca con `npm start`.
+
+Con Docker:
+
+```bash
+docker build -t sasmoney .
+docker run -p 3000:3000 -v sasmoney-data:/data \
+  -e DATA_DIR=/data -e COOKIE_SECURE=1 -e ADMIN_PASSWORD='tu-contraseña' sasmoney
+```
+
+> **Copias de seguridad**: guarda de vez en cuando el contenido de `DATA_DIR`.
+> Ahí está todo.
+
+---
+
+## Detalles que conviene saber
+
+- **El dinero se guarda en céntimos** (números enteros), así que las cuentas no arrastran
+  errores de decimales.
+- **Un servicio liquidado se bloquea**: ni la trabajadora ni tú podéis editarlo o borrarlo.
+  Es lo que hace que la cifra que ya pagaste no cambie por detrás.
+- **La comisión nunca supera lo facturado.** Si una regla de cantidad fija diera más que la
+  caja del periodo, se limita al total y se avisa en el desglose.
+- **Cada trabajadora sólo ve lo suyo.** El acceso a la parte del jefe está cerrado por rol.
+- Al cambiarle la contraseña a alguien, sus sesiones abiertas se cierran solas.
+
+## Desarrollo
+
+```bash
+npm run dev     # arranca recargando al guardar
+npm test        # tests del motor de cálculo de comisiones
+```
+
+Estructura:
+
+```
+src/
+  server.js          arranque, cookies, sesiones y seguridad básica
+  db.js              esquema SQLite y creación del administrador
+  commission.js      el motor de cálculo (porcentaje, tramos, fijo)
+  repo.js            consultas: servicios, totales, liquidaciones
+  util.js            fechas, zona horaria y escapado de HTML
+  routes/            auth.js · worker.js · admin.js
+  views/             HTML de cada pantalla
+public/              estilos y un poco de JavaScript de interfaz
+test/                tests del motor de cálculo
+```
