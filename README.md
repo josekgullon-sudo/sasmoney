@@ -63,7 +63,7 @@ npm install
 npm start
 ```
 
-Abre <http://localhost:3000>. La primera vez se crea el usuario administrador y la
+Abre <http://localhost:4400>. La primera vez se crea el usuario administrador y la
 contraseña se imprime en la consola (por defecto `admin` / `cambiar123`).
 **Cámbiala nada más entrar**: la aplicación te avisa con una banda amarilla hasta que lo hagas.
 
@@ -74,7 +74,7 @@ Puedes crear un fichero `.env` (mira `.env.example`) o poner las variables en tu
 
 | Variable | Para qué | Por defecto |
 |---|---|---|
-| `PORT` | Puerto donde escucha | `3000` |
+| `PORT` | Puerto donde escucha | `4400` |
 | `DATA_DIR` | Carpeta donde se guarda la base de datos | `./data` |
 | `DB_FILE` | Ruta completa del fichero de base de datos | `<DATA_DIR>/sasmoney.db` |
 | `ADMIN_USER` | Usuario del jefe (sólo al crear la base de datos) | `admin` |
@@ -96,7 +96,7 @@ Con Docker:
 
 ```bash
 docker build -t sasmoney .
-docker run -p 3000:3000 -v sasmoney-data:/data \
+docker run -p 4400:4400 -v sasmoney-data:/data \
   -e DATA_DIR=/data -e COOKIE_SECURE=1 -e ADMIN_PASSWORD='tu-contraseña' sasmoney
 ```
 

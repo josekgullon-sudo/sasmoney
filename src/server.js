@@ -106,7 +106,7 @@ app.use((err, req, res, next) => {
   res.status(500).send('Ha ocurrido un error. Vuelve a intentarlo.');
 });
 
-const PORT = Number(process.env.PORT || 3000);
+const PORT = Number(process.env.PORT || 4400);
 
 if (require.main === module) {
   pruneSessions();
