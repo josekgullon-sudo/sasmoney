@@ -1,6 +1,6 @@
 'use strict';
 
-const { db } = require('./db');
+const { db, transaction } = require('./db');
 const { calcCommission } = require('./commission');
 
 /**
@@ -60,7 +60,7 @@ function createEntry(data) {
        VALUES (@user_id, @service_date, @amount_cents, @client_label, @town_id, @payment_method, @notes)`
     )
     .run(data);
-  return info.lastInsertRowid;
+  return Number(info.lastInsertRowid);
 }
 
 function updateEntry(id, data) {
@@ -164,7 +164,7 @@ function settlementRows({ from, to, pendingOnly = true, includeEmpty = false }) 
 }
 
 /** Cierra la liquidación de un trabajador: guarda el resumen y marca sus servicios como pagados. */
-const closeSettlement = db.transaction(({ worker, from, to, note = '' }) => {
+const closeSettlement = transaction(({ worker, from, to, note = '' }) => {
   const entries = listEntries({ userId: worker.id, from, to, pendingOnly: true });
   if (entries.length === 0) return null;
 
@@ -195,7 +195,7 @@ const closeSettlement = db.transaction(({ worker, from, to, note = '' }) => {
       note
     );
 
-  const settlementId = info.lastInsertRowid;
+  const settlementId = Number(info.lastInsertRowid);
   const mark = db.prepare('UPDATE entries SET settlement_id = ? WHERE id = ?');
   for (const e of entries) mark.run(settlementId, e.id);
 
@@ -203,6 +203,8 @@ const closeSettlement = db.transaction(({ worker, from, to, note = '' }) => {
 });
 
 function listSettlements({ userId = null, limit = 50 } = {}) {
+  // Sólo se pasan los parámetros que la consulta usa de verdad.
+  const params = userId ? { userId, limit } : { limit };
   return db
     .prepare(
       `SELECT s.*, u.name AS worker_name
@@ -210,7 +212,7 @@ function listSettlements({ userId = null, limit = 50 } = {}) {
         ${userId ? 'WHERE s.user_id = @userId' : ''}
         ORDER BY s.created_at DESC, s.id DESC LIMIT @limit`
     )
-    .all({ userId, limit });
+    .all(params);
 }
 
 module.exports = {

@@ -56,7 +56,8 @@ Puedes poner tantos tramos como quieras, no sólo tres.
 
 ## Ponerla en marcha
 
-Hace falta Node.js 20.12 o superior.
+Hace falta Node.js 24 (recomendado) o cualquier versión desde la 22.13.
+No compila nada: SQLite viene dentro de Node, así que `npm install` tarda segundos.
 
 ```bash
 npm install
@@ -105,8 +106,24 @@ docker run -p 4400:4400 -v sasmoney-data:/data \
 
 ---
 
+## Si algo no arranca
+
+- **`npm install` se queda parado varios minutos.** No debería pasar: las dos únicas
+  dependencias (Express y bcryptjs) son JavaScript puro y no compilan nada. Si se queda
+  quieto, corta con `Ctrl+C`, borra la carpeta `node_modules` y vuelve a intentarlo.
+- **`Cannot find module 'express'`.** El `npm install` no llegó a terminar. Repítelo y
+  espera a que devuelva el símbolo del sistema antes de lanzar `npm start`.
+- **`Could not find a production build in the '.next' directory`.** Ese error es de otro
+  proyecto: estás lanzando el comando desde otra carpeta. Comprueba con `pwd` que estás
+  dentro de `sasmoney`.
+- **Dice que tu Node no trae SQLite incorporado.** Instala Node 24 desde
+  <https://nodejs.org> y repite `npm start`.
+- **El puerto está ocupado.** Arranca en otro con `PORT=5555 npm start`.
+
 ## Detalles que conviene saber
 
+- **No hay nada que compilar ni ninguna base de datos que instalar.** SQLite viene
+  incorporado en Node (`node:sqlite`), así que la aplicación son dos dependencias y ya.
 - **El dinero se guarda en céntimos** (números enteros), así que las cuentas no arrastran
   errores de decimales.
 - **Un servicio liquidado se bloquea**: ni la trabajadora ni tú podéis editarlo o borrarlo.
@@ -128,7 +145,7 @@ Estructura:
 ```
 src/
   server.js          arranque, cookies, sesiones y seguridad básica
-  db.js              esquema SQLite y creación del administrador
+  db.js              esquema SQLite (node:sqlite) y creación del administrador
   commission.js      el motor de cálculo (porcentaje, tramos, fijo)
   repo.js            consultas: servicios, totales, liquidaciones
   util.js            fechas, zona horaria y escapado de HTML

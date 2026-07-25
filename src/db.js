@@ -2,17 +2,54 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
+
+// Node avisa de que su SQLite es experimental; ese aviso no aporta nada aquí,
+// pero cualquier otro se sigue mostrando.
+const otherWarningListeners = process.listeners('warning');
+process.removeAllListeners('warning');
+process.on('warning', (w) => {
+  if (w.name === 'ExperimentalWarning' && /sqlite/i.test(w.message)) return;
+  for (const listener of otherWarningListeners) listener(w);
+});
+
+let DatabaseSync;
+try {
+  ({ DatabaseSync } = require('node:sqlite'));
+} catch {
+  console.error(
+    `\nTu versión de Node.js (${process.version}) no trae SQLite incorporado.\n` +
+      'Descarga Node.js 24 en https://nodejs.org y vuelve a ejecutar "npm start".\n'
+  );
+  process.exit(1);
+}
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const DB_FILE = process.env.DB_FILE || path.join(DATA_DIR, 'sasmoney.db');
 
 fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
 
-const db = new Database(DB_FILE);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+const db = new DatabaseSync(DB_FILE);
+db.exec('PRAGMA journal_mode = WAL');
+db.exec('PRAGMA foreign_keys = ON');
+
+/**
+ * Ejecuta varias escrituras como una sola operación: o entran todas o no entra
+ * ninguna. Sustituye al ayudante que traía better-sqlite3.
+ */
+function transaction(fn) {
+  return (...args) => {
+    db.exec('BEGIN');
+    try {
+      const result = fn(...args);
+      db.exec('COMMIT');
+      return result;
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  };
+}
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS users (
@@ -111,4 +148,4 @@ function setSetting(key, value) {
   ).run(key, String(value));
 }
 
-module.exports = { db, ensureAdmin, getSetting, setSetting, DB_FILE };
+module.exports = { db, transaction, ensureAdmin, getSetting, setSetting, DB_FILE };
