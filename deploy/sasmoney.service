@@ -4,6 +4,12 @@ Documentation=https://github.com/josekgullon-sudo/sasmoney
 After=network-online.target
 Wants=network-online.target
 
+# Si el servicio se cayera una y otra vez, systemd deja de insistir tras 5
+# intentos en 60 segundos para no llenar el disco de registros.
+# (Estas dos claves van aquí, en [Unit]; dentro de [Service] se ignoran.)
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
 [Service]
 Type=simple
 User=sasmoney
@@ -17,11 +23,6 @@ ExecStart=/opt/sasmoney/node src/server.js
 
 Restart=always
 RestartSec=3
-
-# Si el servicio se cae repetidamente, systemd deja de insistir tras 5 intentos
-# en 60 segundos para no llenar el disco de registros.
-StartLimitBurst=5
-StartLimitIntervalSec=60
 
 # --- Aislamiento: este servicio no puede tocar nada más del servidor ---
 NoNewPrivileges=true
