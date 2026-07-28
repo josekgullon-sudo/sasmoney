@@ -33,7 +33,7 @@ die()  { printf '\n\033[0;31mError:\033[0m %s\n\n' "$1" >&2; exit 1; }
 command -v systemctl >/dev/null || die "Este script necesita systemd (Ubuntu, Debian, Rocky...)."
 
 # ---------------------------------------------------------------- 1. Puerto
-say "Buscando un puerto libre"
+say "Eligiendo el puerto"
 PORT=${PORT:-4400}
 
 # Se comprueba de dos maneras para no depender de que 'ss' esté instalado:
@@ -52,16 +52,33 @@ port_ocupado() {
   return 1
 }
 
-if port_ocupado "$PORT"; then
-  warn "El puerto $PORT ya está ocupado por otro programa."
-  for p in 4401 4402 4403 4404 4405; do
-    if ! port_ocupado "$p"; then PORT=$p; break; fi
-  done
-  if port_ocupado "$PORT"; then
-    die "No encuentro un puerto libre entre el 4400 y el 4405."
-  fi
+# Si ya estaba instalada, se respeta su puerto: cambiarlo en cada actualización
+# dejaría colgada la configuración del proxy. El que lo ocupa es ella misma.
+PORT_ANTERIOR=""
+if [ -f "$ENV_FILE" ]; then
+  PORT_ANTERIOR=$(sed -n 's/^PORT=\([0-9]\{1,\}\).*/\1/p' "$ENV_FILE" | head -1)
 fi
-ok "Usará el puerto $PORT (Emby usa el 8096, no se toca)"
+
+if [ -n "$PORT_ANTERIOR" ]; then
+  PORT=$PORT_ANTERIOR
+  # Sólo preocupa que lo haya cogido OTRO programa mientras ella estaba parada.
+  if ! systemctl is-active --quiet sasmoney.service 2>/dev/null && port_ocupado "$PORT"; then
+    warn "El puerto $PORT lo está usando otro programa y SasMoney está parada."
+    warn "Cámbialo en $ENV_FILE y ajusta el proxy, o para ese otro programa."
+  fi
+  ok "Se mantiene el puerto $PORT de la instalación anterior"
+else
+  if port_ocupado "$PORT"; then
+    warn "El puerto $PORT ya está ocupado por otro programa."
+    for p in 4401 4402 4403 4404 4405; do
+      if ! port_ocupado "$p"; then PORT=$p; break; fi
+    done
+    if port_ocupado "$PORT"; then
+      die "No encuentro un puerto libre entre el 4400 y el 4405."
+    fi
+  fi
+  ok "Usará el puerto $PORT (Emby usa el 8096, no se toca)"
+fi
 
 # ------------------------------------------------------------- 2. Usuario
 say "Preparando el usuario y las carpetas"
@@ -122,13 +139,20 @@ fi
 
 # ------------------------------------------------------------ 4. Aplicación
 say "Descargando la aplicación"
+command -v git >/dev/null || die "Falta git. Instálalo con: apt install git"
+
+# El código pertenece a root y la aplicación sólo lo lee: así ni siquiera ella
+# puede modificar sus propios ficheros. safe.directory evita que git se queje si
+# una instalación anterior dejó la carpeta con otro dueño.
+gitapp() { git -c safe.directory="$APP_DIR" -C "$APP_DIR" "$@"; }
+
 if [ -d "$APP_DIR/.git" ]; then
-  git -C "$APP_DIR" fetch --quiet origin "$BRANCH"
-  git -C "$APP_DIR" checkout --quiet "$BRANCH"
-  git -C "$APP_DIR" reset --hard --quiet "origin/$BRANCH"
+  chown -R root:root "$APP_DIR"
+  gitapp fetch --quiet origin "$BRANCH"
+  gitapp checkout --quiet "$BRANCH"
+  gitapp reset --hard --quiet "origin/$BRANCH"
   ok "Actualizada a la última versión"
 else
-  command -v git >/dev/null || die "Falta git. Instálalo con: apt install git"
   rm -rf "$APP_DIR"
   git clone --quiet --branch "$BRANCH" "$REPO" "$APP_DIR"
   ok "Descargada en $APP_DIR"
@@ -141,7 +165,9 @@ NPM="$BASE/runtime/bin/npm"
 (cd "$APP_DIR" && "$NPM" install --omit=dev --no-audit --no-fund --loglevel=error)
 ok "Listas"
 
-chown -R "$APP_USER:$APP_USER" "$BASE"
+# Todo el código en manos de root, legible por la aplicación pero no modificable.
+chown -R root:root "$BASE"
+chmod -R a+rX "$APP_DIR"
 
 # ------------------------------------------------------- 5. Configuración
 say "Escribiendo la configuración"
@@ -168,7 +194,9 @@ else
   NUEVA_INSTALACION=0
   ok "Se mantiene la configuración que ya tenías"
 fi
-chown "$APP_USER:$APP_USER" "$ENV_FILE"
+# Lleva la contraseña dentro: sólo root. Systemd lo lee antes de bajar privilegios,
+# así que la aplicación no necesita acceso a este fichero.
+chown root:root "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 
 # ------------------------------------------------------------ 6. Servicio
@@ -196,13 +224,22 @@ echo
 printf '\033[1;32m────────────────────────────────────────────────\033[0m\n'
 printf '  SasMoney funcionando\n'
 printf '\033[1;32m────────────────────────────────────────────────\033[0m\n'
-printf '  Dirección interna:  http://127.0.0.1:%s\n' "$PORT"
 if [ "$NUEVA_INSTALACION" = "1" ]; then
-  printf '  Usuario:            admin\n'
-  printf '  Contraseña:         %s\n' "$(grep '^ADMIN_PASSWORD=' "$ENV_FILE" | cut -d= -f2-)"
-  printf '\n  Apúntala. También está en %s\n' "$ENV_FILE"
+  printf '  Usuario:     admin\n'
+  printf '  Contraseña:  %s\n' "$(sed -n 's/^ADMIN_PASSWORD=//p' "$ENV_FILE" | head -1)"
+  printf '\n  Apúntala y cámbiala nada más entrar, desde "Mi cuenta".\n\n'
+else
+  printf '  Actualizada. Tus datos y tu contraseña siguen igual.\n\n'
 fi
-printf '\n  Siguiente paso: publicarla en internet con HTTPS.\n'
-printf '  Mira DESPLIEGUE.md, apartado "Abrirla a internet".\n\n'
-printf '  Ver el estado:   sudo systemctl status sasmoney\n'
-printf '  Ver el registro: sudo journalctl -u sasmoney -f\n\n'
+printf '  \033[1mPARA ENTRAR A VERLA DESDE TU ORDENADOR\033[0m\n'
+printf '  De momento sólo escucha dentro de este servidor, así que escribir\n'
+printf '  127.0.0.1:%s en tu navegador NO vale: esa dirección es tu propio\n' "$PORT"
+printf '  ordenador. Abre un túnel desde tu ordenador (no aquí):\n\n'
+printf '      ssh -L %s:127.0.0.1:%s %s@%s\n\n' "$PORT" "$PORT" "${SUDO_USER:-root}" "$(hostname -I 2>/dev/null | awk '{print $1}')"
+printf '  Deja esa ventana abierta y entra en:  http://127.0.0.1:%s\n' "$PORT"
+printf '\n'
+printf '  \033[1mSIGUIENTE PASO\033[0m\n'
+printf '  Publicarla con tu dominio y HTTPS para que entren tus trabajadoras\n'
+printf '  desde el móvil: mira DESPLIEGUE.md, apartado "Abrirla a internet".\n\n'
+printf '  Estado:      sudo systemctl status sasmoney --no-pager\n'
+printf '  Registro:    sudo journalctl -u sasmoney -f\n\n'
