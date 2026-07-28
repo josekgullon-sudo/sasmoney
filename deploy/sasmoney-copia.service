@@ -1,0 +1,6 @@
+[Unit]
+Description=Copia de seguridad de SasMoney
+
+[Service]
+Type=oneshot
+ExecStart=/opt/sasmoney/copia-seguridad.sh

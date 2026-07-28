@@ -1,0 +1,10 @@
+# Ejemplo para Caddy: HTTPS automático, sin tener que tocar certificados.
+# Cambia sasmoney.tudominio.com por tu dominio y el 4400 si el instalador
+# eligió otro puerto.
+#
+# Si ya usas Caddy para Emby, NO sustituyas tu fichero: añade sólo este bloque
+# al final de /etc/caddy/Caddyfile y recarga con:  sudo systemctl reload caddy
+
+sasmoney.tudominio.com {
+	reverse_proxy 127.0.0.1:4400
+}

@@ -1,0 +1,49 @@
+[Unit]
+Description=SasMoney - control de cobros y liquidaciones
+Documentation=https://github.com/josekgullon-sudo/sasmoney
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sasmoney
+Group=sasmoney
+WorkingDirectory=/opt/sasmoney/app
+
+# El binario de Node lo pone el instalador: el del sistema si sirve, o uno
+# propio dentro de /opt/sasmoney/runtime. Nunca se toca el Node del sistema.
+EnvironmentFile=/opt/sasmoney/sasmoney.env
+ExecStart=/opt/sasmoney/node src/server.js
+
+Restart=always
+RestartSec=3
+
+# Si el servicio se cae repetidamente, systemd deja de insistir tras 5 intentos
+# en 60 segundos para no llenar el disco de registros.
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+# --- Aislamiento: este servicio no puede tocar nada más del servidor ---
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+SystemCallArchitectures=native
+
+# Lo único que puede escribir es su propia carpeta de datos.
+ReadWritePaths=/var/lib/sasmoney
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sasmoney
+
+[Install]
+WantedBy=multi-user.target

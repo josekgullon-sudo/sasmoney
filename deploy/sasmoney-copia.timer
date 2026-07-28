@@ -1,0 +1,12 @@
+[Unit]
+Description=Copia de seguridad de SasMoney cada noche
+
+[Timer]
+# Todos los días a las 4:30 de la madrugada. Si el servidor estaba apagado,
+# la copia se hace en cuanto vuelva a encenderse.
+OnCalendar=*-*-* 04:30:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

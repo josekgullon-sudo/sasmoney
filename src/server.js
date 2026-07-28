@@ -107,6 +107,9 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = Number(process.env.PORT || 4400);
+// En el servidor se escucha sólo en 127.0.0.1: quien la publica hacia fuera,
+// con su HTTPS, es el proxy. En un ordenador de casa se deja abierta a la red local.
+const HOST = process.env.HOST || '0.0.0.0';
 
 if (require.main === module) {
   pruneSessions();
@@ -120,7 +123,9 @@ if (require.main === module) {
     if (seeded.generated) console.log('  ¡Cámbiala nada más entrar!');
     console.log('──────────────────────────────────────────────');
   }
-  app.listen(PORT, () => console.log(`SasMoney escuchando en http://localhost:${PORT}`));
+  app.listen(PORT, HOST, () =>
+    console.log(`SasMoney escuchando en http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`)
+  );
 }
 
 module.exports = app;

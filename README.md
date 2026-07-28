@@ -83,15 +83,26 @@ Puedes crear un fichero `.env` (mira `.env.example`) o poner las variables en tu
 | `TZ_APP` | Zona horaria del negocio | `Europe/Madrid` |
 | `COOKIE_SECURE` | Pon `1` cuando la sirvas por HTTPS | apagado |
 | `SESSION_DAYS` | Días que dura la sesión sin volver a entrar | `30` |
+| `HOST` | Interfaz donde escucha (`127.0.0.1` si hay un proxy delante) | `0.0.0.0` |
 
-### Subirla a internet
+### Subirla a un servidor
 
-Los datos viven en un único fichero SQLite dentro de `DATA_DIR`. Cualquier servidor que te
-deje montar un disco persistente vale (Railway, Render, Fly.io, un VPS…):
+**→ [DESPLIEGUE.md](DESPLIEGUE.md) tiene la guía paso a paso** para dejarla funcionando
+en un servidor Linux con HTTPS, arranque automático y copias de seguridad, sin tocar nada
+de lo que ya haya instalado en esa máquina. Resumen:
+
+```bash
+git clone -b claude/saas-clientes-pagos-muh221 https://github.com/josekgullon-sudo/sasmoney.git /tmp/sasmoney
+sudo bash /tmp/sasmoney/deploy/instalar.sh
+```
+
+A mano, en cualquier otro sitio (Railway, Render, Fly.io…):
 
 1. Monta un disco persistente y apunta `DATA_DIR` a él (por ejemplo `/data`).
 2. Pon `COOKIE_SECURE=1` y `ADMIN_PASSWORD` con una contraseña tuya.
-3. Arranca con `npm start`.
+3. Si delante hay un proxy con HTTPS, añade `HOST=127.0.0.1` para que la aplicación no
+   quede accesible por otro camino.
+4. Arranca con `npm start`.
 
 Con Docker:
 
