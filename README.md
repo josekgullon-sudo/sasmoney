@@ -26,10 +26,11 @@ Pensada para usarse desde el móvil: apuntar un cobro son dos toques.
 ### Para el jefe
 
 - **Resumen**: lo facturado del mes, lo que se llevan ellas y lo que queda para la empresa.
-- **Liquidación**: eliges el periodo (un mes entero o dos fechas sueltas), pulsas
-  *Calcular lo que tengo que pagar* y te sale la cifra de cada trabajadora con su desglose.
-  Al pagarle, pulsas *Marcar como pagado*: esos servicios quedan cerrados y ya no se
-  cuentan otra vez el mes siguiente ni se pueden tocar.
+- **Liquidación**: eliges **una trabajadora o todas** y el periodo (un mes entero o dos
+  fechas sueltas), y te sale lo que le tienes que pagar con su desglose. Cuando le pagues,
+  pulsas *Liquidado*: su cuenta de ese periodo vuelve a cero, esos servicios quedan
+  cerrados y ya no se cuentan otra vez ni se pueden modificar. Cada trabajadora se liquida
+  por separado, sin afectar a las demás.
 - **Trabajadores**: das de alta a cada una, le pones su usuario y su contraseña, y decides
   cuánto se lleva.
 - **Servicios**: todos los cobros, con filtros y descarga en CSV (se abre con Excel).

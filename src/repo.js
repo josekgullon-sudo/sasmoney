@@ -146,8 +146,12 @@ function commonAmounts(userId, limit = 4) {
  * Calcula la liquidación de cada trabajador en un periodo.
  * Devuelve una fila por trabajador con sus servicios, totales y comisión.
  */
-function settlementRows({ from, to, pendingOnly = true, includeEmpty = false }) {
-  const workers = listWorkers({ includeInactive: true });
+function settlementRows({ from, to, pendingOnly = true, includeEmpty = false, userId = null }) {
+  // Con un trabajador elegido se enseña sólo el suyo, y aunque no tenga nada
+  // pendiente: hay que poder ver que ya está todo liquidado.
+  const workers = userId
+    ? [getUser(userId)].filter((u) => u && u.role === 'worker')
+    : listWorkers({ includeInactive: true });
   const rows = [];
 
   for (const worker of workers) {

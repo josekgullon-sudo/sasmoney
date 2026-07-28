@@ -62,31 +62,37 @@ ${stats([
       ? emptyState('Nadie ha apuntado nada este mes.')
       : `<div class="table-wrap"><table>
     <thead><tr>
-      <th>Trabajador</th><th class="num">Servicios</th><th class="num">Facturado</th>
-      <th>Regla</th><th class="num">Su comisión</th><th class="num">A liquidar</th>
+      <th>Trabajador</th><th class="num hide-narrow">Servicios</th><th class="num">Facturado</th>
+      <th class="hide-narrow">Regla</th><th class="num">Su comisión</th><th class="num">A liquidar</th><th></th>
     </tr></thead>
     <tbody>
       ${rows
         .map(
           (r) => `<tr>
-        <td><a href="/admin/servicios?worker=${r.user.id}&month=${esc(month)}">${esc(r.user.name)}</a></td>
-        <td class="num">${r.count}</td>
+        <td class="nowrap"><a href="/admin/servicios?worker=${r.user.id}&month=${esc(month)}">${esc(r.user.name)}</a></td>
+        <td class="num hide-narrow">${r.count}</td>
         <td class="num">${money(r.totalCents)}</td>
-        <td class="small muted">${esc(ruleLabel(r.user))}</td>
+        <td class="small muted hide-narrow">${esc(ruleLabel(r.user))}</td>
         <td class="num">${money(r.calc.commissionCents)}</td>
         <td class="num"><strong>${money(r.pendingCommissionCents)}</strong></td>
+        <td class="right nowrap">${
+          r.pendingCommissionCents > 0
+            ? `<a class="btn small" href="/admin/liquidacion?month=${esc(month)}&worker=${r.user.id}">Liquidar</a>`
+            : '<span class="pill ok">Al día</span>'
+        }</td>
       </tr>`
         )
         .join('')}
     </tbody>
     <tfoot><tr>
-      <td>Total</td><td class="num">${totals.count}</td><td class="num">${money(totals.totalCents)}</td>
-      <td></td><td class="num">${money(totals.commissionCents)}</td><td class="num">${money(pendingTotalCents)}</td>
+      <td>Total</td><td class="num hide-narrow">${totals.count}</td><td class="num">${money(totals.totalCents)}</td>
+      <td class="hide-narrow"></td><td class="num">${money(totals.commissionCents)}</td>
+      <td class="num">${money(pendingTotalCents)}</td><td></td>
     </tr></tfoot>
   </table></div>`
   }
   <p class="sub"><strong>A liquidar</strong> es lo que le debes ahora mismo a cada una: su comisión de lo que
-     aún no le has pagado.</p>
+     aún no le has pagado. El botón <strong>Liquidar</strong> te lleva a su cuenta para darla por pagada.</p>
   <div class="actions" style="margin-top:14px">
     <a class="btn" href="/admin/liquidacion?month=${esc(month)}">Ver qué tengo que pagar</a>
     <a class="btn ghost" href="/admin/servicios?month=${esc(month)}">Ver todos los servicios</a>
@@ -96,13 +102,27 @@ ${stats([
   return layout({ title: 'Resumen', user, body, active: 'resumen', flash, warning });
 }
 
-function adminSettlement({ user, flash, warning, from, to, month, onlyPending, rows, totals, history }) {
+function adminSettlement({ user, flash, warning, from, to, month, onlyPending, rows, totals, history, workers, workerId }) {
+  const elegida = workerId ? workers.find((w) => w.id === workerId) : null;
   const body = `
-<h1>Liquidación</h1>
-<p class="sub">Elige el periodo y pulsa el botón: te dice exactamente cuánto le tienes que pagar a cada una.</p>
+<h1>Liquidación${elegida ? ` de ${esc(elegida.name)}` : ''}</h1>
+<p class="sub">Elige el trabajador y el periodo: te dice exactamente cuánto le tienes que pagar.
+   Cuando le pagues, pulsa <strong>Liquidado</strong> y su cuenta vuelve a cero.</p>
 
 <form method="get" action="/admin/liquidacion" class="card">
   <div class="row">
+    <div>
+      <label for="worker">Trabajador</label>
+      <select id="worker" name="worker">
+        <option value="">Todos</option>
+        ${workers
+          .map(
+            (w) =>
+              `<option value="${w.id}" ${String(workerId) === String(w.id) ? 'selected' : ''}>${esc(w.name)}</option>`
+          )
+          .join('')}
+      </select>
+    </div>
     <div>
       <label for="month">Mes completo</label>
       <select id="month" name="month">
@@ -143,16 +163,24 @@ ${stats([
   ${
     rows.length === 0
       ? emptyState('No hay nada que liquidar en este periodo.')
-      : rows.map((r) => settlementCard(r, { from, to, onlyPending })).join('')
+      : rows
+          .map((r) =>
+            r.count === 0
+              ? `<div class="banner ok" style="margin:0 0 12px">
+                   <strong>${esc(r.user.name)}</strong>: no queda nada pendiente en este periodo. Está todo liquidado.
+                 </div>`
+              : settlementCard(r, { from, to, onlyPending })
+          )
+          .join('')
   }
   <div class="actions no-print" style="margin-top:14px">
-    <a class="btn ghost" href="/admin/liquidacion.csv?from=${esc(from)}&to=${esc(to)}&only_pending=${onlyPending ? 1 : 0}">Descargar CSV</a>
+    <a class="btn ghost" href="/admin/liquidacion.csv?from=${esc(from)}&to=${esc(to)}&only_pending=${onlyPending ? 1 : 0}${workerId ? `&worker=${workerId}` : ''}">Descargar CSV</a>
     <button class="btn ghost" type="button" onclick="window.print()">Imprimir</button>
   </div>
 </div>
 
 <div class="card">
-  <h2>Liquidaciones ya cerradas</h2>
+  <h2>Liquidaciones ya cerradas${elegida ? ` de ${esc(elegida.name)}` : ''}</h2>
   ${
     history.length === 0
       ? emptyState('Aún no has cerrado ninguna liquidación.')
@@ -231,9 +259,14 @@ function settlementCard(r, { from, to, onlyPending }) {
       <input type="hidden" name="user_id" value="${r.user.id}">
       <input type="hidden" name="from" value="${esc(from)}">
       <input type="hidden" name="to" value="${esc(to)}">
-      <button class="btn" type="submit" data-confirm="Vas a marcar como pagados ${r.count} servicio(s) de ${esc(
+      <button class="btn big" type="submit" data-confirm="Vas a dar por pagados ${r.count} servicio(s) de ${esc(
         r.user.name
-      )} por ${money(r.calc.commissionCents)}. ¿Confirmas?">Marcar como pagado (${money(r.calc.commissionCents)})</button>
+      )} por ${money(r.calc.commissionCents)}.
+
+Su cuenta de este periodo quedará a cero y esos servicios ya no se podrán modificar. ¿Confirmas?">✓ Liquidado: ya le he pagado ${money(
+        r.calc.commissionCents
+      )}</button>
+      <p class="hint">Al pulsarlo, ${esc(r.user.name)} empieza de cero en este periodo.</p>
     </form>`
       : ''
   }

@@ -88,7 +88,18 @@ function resolvePeriod(query) {
 router.get('/liquidacion', (req, res) => {
   const { from, to, month } = resolvePeriod(req.query);
   const onlyPending = readOnlyPending(req.query);
-  const rows = repo.settlementRows({ from, to, pendingOnly: onlyPending });
+  const workerId = req.query.worker ? Number(req.query.worker) : null;
+  const worker = workerId ? repo.getUser(workerId) : null;
+  const soloUno = Boolean(worker && worker.role === 'worker');
+
+  const rows = repo.settlementRows({
+    from,
+    to,
+    pendingOnly: onlyPending,
+    userId: soloUno ? worker.id : null,
+    // Con uno elegido se muestra siempre, para poder ver que ya está liquidado.
+    includeEmpty: soloUno,
+  });
 
   const totals = rows.reduce(
     (acc, r) => ({
@@ -111,7 +122,9 @@ router.get('/liquidacion', (req, res) => {
       onlyPending,
       rows,
       totals,
-      history: repo.listSettlements({ limit: 30 }),
+      workers: repo.listWorkers({ includeInactive: true }),
+      workerId: soloUno ? worker.id : null,
+      history: repo.listSettlements({ userId: soloUno ? worker.id : null, limit: 30 }),
     })
   );
 });
@@ -137,13 +150,14 @@ router.post('/liquidacion/cerrar', (req, res) => {
       )}.`
     );
   }
-  res.redirect(`/admin/liquidacion?from=${from}&to=${to}&only_pending=1`);
+  res.redirect(`/admin/liquidacion?from=${from}&to=${to}&only_pending=1&worker=${worker.id}`);
 });
 
 router.get('/liquidacion.csv', (req, res) => {
   const { from, to } = resolvePeriod(req.query);
   const onlyPending = readOnlyPending(req.query);
-  const rows = repo.settlementRows({ from, to, pendingOnly: onlyPending });
+  const workerId = req.query.worker ? Number(req.query.worker) : null;
+  const rows = repo.settlementRows({ from, to, pendingOnly: onlyPending, userId: workerId });
 
   const lines = [['Trabajador', 'Servicios', 'Facturado', 'Regla', 'A pagar', 'Para la empresa']];
   for (const r of rows) {
