@@ -13,7 +13,6 @@ Pensada para usarse desde el móvil: apuntar un cobro son dos toques.
 
 1. Entra con su usuario y su contraseña.
 2. Escribe **el importe** y pulsa *Apuntar cobro*. Ya está.
-   - El pueblo aparece ya marcado (el último que usó).
    - Los importes que más repite salen como botones, para no escribir.
    - El nombre del cliente es **opcional**: si lo deja vacío se numera solo
      (*Cliente 1*, *Cliente 2*…). Si quiere, puede poner un nombre o un mote.
