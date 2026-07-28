@@ -22,14 +22,13 @@ function readEntryForm(body, { today }) {
   if (!isValidDate(service_date)) service_date = today;
   if (service_date > today) service_date = today;
 
-  const town_id = body.town_id ? Number(body.town_id) : null;
   const payment_method = METHODS.includes(body.payment_method) ? body.payment_method : 'efectivo';
 
   return {
     data: {
       amount_cents,
       service_date,
-      town_id: Number.isInteger(town_id) && town_id > 0 ? town_id : null,
+      town_id: null,
       client_label: String(body.client_label || '').trim().slice(0, 80),
       payment_method,
       notes: String(body.notes || '').trim().slice(0, 200),
@@ -56,8 +55,6 @@ router.get('/', requireLogin, (req, res) => {
       user: req.user,
       flash: res.locals.flash,
       warning: res.locals.warning,
-      towns: repo.listTowns(),
-      lastTownId: repo.lastTownId(req.user.id),
       today,
       month,
       suggestions: repo.commonAmounts(req.user.id),
@@ -98,7 +95,6 @@ router.get('/servicios/:id/editar', requireLogin, (req, res) => {
       flash: res.locals.flash,
       warning: res.locals.warning,
       entry,
-      towns: repo.listTowns(),
       today: todayISO(),
     })
   );

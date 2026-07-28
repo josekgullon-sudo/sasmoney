@@ -5,6 +5,7 @@ const express = require('express');
 
 const { ensureAdmin, getSetting, setSetting } = require('./db');
 const { attachUser, pruneSessions } = require('./auth');
+const { BRAND } = require('./util');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -125,7 +126,7 @@ if (require.main === module) {
     console.log('──────────────────────────────────────────────');
   }
   app.listen(PORT, HOST, () =>
-    console.log(`SasMoney escuchando en http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`)
+    console.log(`${BRAND} escuchando en http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`)
   );
 }
 

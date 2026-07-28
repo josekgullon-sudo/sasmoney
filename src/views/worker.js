@@ -10,16 +10,22 @@ const PAYMENT_METHODS = [
   ['bizum', 'Bizum'],
   ['tarjeta', 'Tarjeta'],
   ['transferencia', 'Transferencia'],
+  ['paypal', 'PayPal'],
   ['otro', 'Otro'],
 ];
+
+/** Nombre bonito del método de pago ('bizum' -> 'Bizum'). */
+function metodoLegible(valor) {
+  const par = PAYMENT_METHODS.find(([v]) => v === valor);
+  return par ? par[1] : valor;
+}
 
 /**
  * Formulario de alta rápida: sólo el importe es obligatorio.
  * Todo lo demás viene ya rellenado con lo último que usó el trabajador.
  */
-function quickForm({ towns, lastTownId, today, suggestions, action = '/servicios', entry = null }) {
+function quickForm({ today, suggestions, action = '/servicios', entry = null }) {
   const isEdit = Boolean(entry);
-  const selectedTown = isEdit ? entry.town_id : lastTownId;
   const method = isEdit ? entry.payment_method : 'efectivo';
 
   return `<form method="post" action="${action}" data-once>
@@ -36,20 +42,6 @@ function quickForm({ towns, lastTownId, today, suggestions, action = '/servicios
            <div class="hint">Tus importes más habituales, para no escribir.</div>`
         : ''
     }
-  </div>
-
-  <div class="field">
-    <label for="town_id">Pueblo</label>
-    <select id="town_id" name="town_id">
-      <option value="">— Sin pueblo —</option>
-      ${towns
-        .map(
-          (t) =>
-            `<option value="${t.id}" ${String(selectedTown) === String(t.id) ? 'selected' : ''}>${esc(t.name)}</option>`
-        )
-        .join('')}
-    </select>
-    <div class="hint">Se queda marcado el último que usaste.</div>
   </div>
 
   <details class="box" ${isEdit ? 'open' : ''}>
@@ -84,7 +76,7 @@ function quickForm({ towns, lastTownId, today, suggestions, action = '/servicios
 </form>`;
 }
 
-function workerHome({ user, flash, warning, towns, lastTownId, today, suggestions, todayEntries, todayCents, monthCents, monthCount, monthCommissionCents, month }) {
+function workerHome({ user, flash, warning, today, suggestions, todayEntries, todayCents, monthCents, monthCount, monthCommissionCents, month }) {
   const body = `
 ${stats([
   { k: 'Hoy', v: money(todayCents), sub: `${todayEntries.length} servicio(s)` },
@@ -95,7 +87,7 @@ ${stats([
 <div class="card" style="margin-top:16px">
   <h2>Apuntar un cobro</h2>
   <p class="sub">Con poner el importe ya vale. Lo demás es opcional.</p>
-  ${quickForm({ towns, lastTownId, today, suggestions })}
+  ${quickForm({ today, suggestions })}
 </div>
 
 <div class="card">
@@ -116,9 +108,9 @@ function entryItem(e, { showWorker = false } = {}) {
   return `<div class="item">
   <div class="grow">
     <div class="title">${esc(e.display_label)}</div>
-    <div class="meta">${showWorker ? `${esc(e.worker_name)} · ` : ''}${esc(formatDateShort(e.service_date))}${
-      e.town_name ? ` · ${esc(e.town_name)}` : ''
-    } · ${esc(e.payment_method)}${e.notes ? ` · ${esc(e.notes)}` : ''}</div>
+    <div class="meta">${showWorker ? `${esc(e.worker_name)} · ` : ''}${esc(formatDateShort(e.service_date))} · ${esc(
+      metodoLegible(e.payment_method)
+    )}${e.notes ? ` · ${esc(e.notes)}` : ''}</div>
   </div>
   <div class="money">${money(e.amount_cents)}</div>
   ${
@@ -220,11 +212,11 @@ ${stats([
   return layout({ title: 'Mis ganancias', user, body, active: 'ganancias', flash, warning });
 }
 
-function workerEditEntry({ user, flash, warning, entry, towns, today }) {
+function workerEditEntry({ user, flash, warning, entry, today }) {
   const body = `
 <h1>Editar servicio</h1>
 <div class="card">
-  ${quickForm({ towns, lastTownId: entry.town_id, today, suggestions: [], action: `/servicios/${entry.id}`, entry })}
+  ${quickForm({ today, suggestions: [], action: `/servicios/${entry.id}`, entry })}
 </div>
 <div class="card">
   <h2>Borrar</h2>
@@ -258,6 +250,7 @@ function monthPicker(action, month, extra = '') {
 
 module.exports = {
   PAYMENT_METHODS,
+  metodoLegible,
   workerHome,
   workerEntries,
   workerEarnings,

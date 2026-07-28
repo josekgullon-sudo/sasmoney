@@ -1,4 +1,4 @@
-# SasMoney
+# SaaS TotalFlix
 
 Aplicación web para que tus trabajadoras apunten los clientes que hacen y lo que cobran,
 y para que tú, como jefe, veas de un botón **cuánto le tienes que pagar a cada una**.
@@ -31,7 +31,8 @@ Pensada para usarse desde el móvil: apuntar un cobro son dos toques.
 - **Trabajadores**: das de alta a cada una, le pones su usuario y su contraseña, y decides
   cuánto se lleva.
 - **Servicios**: todos los cobros, con filtros y descarga en CSV (se abre con Excel).
-- **Pueblos**: la lista de pueblos que ellas eligen al apuntar.
+- **Gastos**: lo que paga la empresa, sueltos o recurrentes. Los recurrentes se repiten
+  solos y el Resumen los descuenta para decirte lo que queda de verdad a fin de mes.
 
 ## Las tres formas de pagar a una trabajadora
 
@@ -83,6 +84,7 @@ Puedes crear un fichero `.env` (mira `.env.example`) o poner las variables en tu
 | `TZ_APP` | Zona horaria del negocio | `Europe/Madrid` |
 | `COOKIE_SECURE` | Pon `1` cuando la sirvas por HTTPS | apagado |
 | `SESSION_DAYS` | Días que dura la sesión sin volver a entrar | `30` |
+| `BRAND` | Nombre que se ve en la aplicación | `SaaS TotalFlix` |
 | `HOST` | Interfaz donde escucha (`127.0.0.1` si hay un proxy delante) | `0.0.0.0` |
 | `LOGIN_MAX_FALLOS` | Intentos de entrada fallidos antes de bloquear | `8` |
 | `LOGIN_BLOQUEO_MIN` | Minutos que dura el bloqueo | `15` |
@@ -148,6 +150,8 @@ docker run -p 4400:4400 -v sasmoney-data:/data \
   Es lo que hace que la cifra que ya pagaste no cambie por detrás.
 - **La comisión nunca supera lo facturado.** Si una regla de cantidad fija diera más que la
   caja del periodo, se limita al total y se avisa en el desglose.
+- **Los gastos recurrentes no se guardan repetidos**: se guarda la primera fecha y las
+  siguientes se calculan, así que nunca se acaban ni hay que renovarlos.
 - **Cada trabajadora sólo ve lo suyo.** El acceso a la parte del jefe está cerrado por rol.
 - **Las contraseñas no se pueden probar a lo bruto**: tras 8 fallos seguidos, esa
   combinación de usuario y origen queda bloqueada 15 minutos.
@@ -168,7 +172,8 @@ src/
   db.js              esquema SQLite (node:sqlite) y creación del administrador
   commission.js      el motor de cálculo (porcentaje, tramos, fijo)
   repo.js            consultas: servicios, totales, liquidaciones
-  util.js            fechas, zona horaria y escapado de HTML
+  util.js            fechas, zona horaria, marca y escapado de HTML
+  expenses.js        gastos y cálculo de los que se repiten
   throttle.js        freno contra los intentos de entrada a lo bruto
   routes/            auth.js · worker.js · admin.js
   views/             HTML de cada pantalla

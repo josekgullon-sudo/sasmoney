@@ -2,6 +2,9 @@
 
 const TZ = process.env.TZ_APP || 'Europe/Madrid';
 
+// Nombre que se ve en la aplicación. Se cambia aquí o con la variable BRAND.
+const BRAND = process.env.BRAND || 'SaaS TotalFlix';
+
 /** Fecha de hoy en la zona horaria del negocio, en formato YYYY-MM-DD. */
 function todayISO(date = new Date()) {
   return new Intl.DateTimeFormat('en-CA', {
@@ -101,6 +104,7 @@ function esc(value) {
 
 module.exports = {
   TZ,
+  BRAND,
   todayISO,
   currentMonth,
   monthRange,

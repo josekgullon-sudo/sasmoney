@@ -2,11 +2,12 @@
 
 const { esc, formatDate, formatDateShort, formatStamp, monthLabel, recentMonths } = require('../util');
 const { ruleLabel, parseTiers } = require('../commission');
+const { KINDS, KIND_LABELS } = require('../expenses');
 const { layout } = require('./layout');
 const { stats, money, emptyState } = require('./common');
-const { PAYMENT_METHODS } = require('./worker');
+const { PAYMENT_METHODS, metodoLegible } = require('./worker');
 
-function adminHome({ user, flash, warning, month, rows, totals, pendingTotalCents }) {
+function adminHome({ user, flash, warning, month, rows, totals, pendingTotalCents, gastos }) {
   const body = `
 <h1>Resumen de ${esc(monthLabel(month))}</h1>
 ${monthForm('/admin', month)}
@@ -14,9 +15,44 @@ ${monthForm('/admin', month)}
 ${stats([
   { k: 'Facturado', v: money(totals.totalCents), sub: `${totals.count} servicio(s)` },
   { k: 'Comisiones', v: money(totals.commissionCents), sub: 'lo que se llevan ellas' },
-  { k: 'Queda para la empresa', v: money(totals.companyCents) },
-  { k: 'Pendiente de pagar', v: money(pendingTotalCents), sub: 'sin liquidar', accent: true },
+  { k: 'Gastos', v: money(gastos.totalCents), sub: `${gastos.delMes.length} gasto(s) del mes` },
+  {
+    k: 'Queda para la empresa',
+    v: money(totals.companyCents - gastos.totalCents),
+    sub: 'facturado − comisiones − gastos',
+    accent: true,
+  },
 ])}
+
+<div class="card" style="margin-top:16px">
+  <h2>Cómo queda el mes</h2>
+  <div class="table-wrap">
+    <table>
+      <tbody>
+        <tr><td>Facturado por todas</td><td class="num">${money(totals.totalCents)}</td></tr>
+        <tr><td>− Comisiones de las trabajadoras</td><td class="num">−${money(totals.commissionCents)}</td></tr>
+        <tr><td>− Gastos de la empresa</td><td class="num">−${money(gastos.totalCents)}</td></tr>
+        <tr><td><strong>Queda para la empresa</strong></td>
+            <td class="num"><strong>${money(totals.companyCents - gastos.totalCents)}</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+  ${
+    gastos.pendientesCents > 0
+      ? `<p class="sub" style="margin-top:12px">De esos gastos, <strong>${money(
+          gastos.pendientesCents
+        )}</strong> todavía están por llegar este mes.</p>`
+      : ''
+  }
+  ${
+    gastos.proximo
+      ? `<p class="sub">Próximo gasto: <strong>${esc(gastos.proximo.name)}</strong>, ${money(
+          gastos.proximo.amount_cents
+        )} el ${esc(formatDate(gastos.proximo.fecha))}.</p>`
+      : ''
+  }
+  <div class="actions" style="margin-top:6px"><a class="btn ghost" href="/admin/gastos">Gestionar los gastos</a></div>
+</div>
 
 <div class="card" style="margin-top:16px">
   <h2>Por trabajador</h2>
@@ -27,7 +63,7 @@ ${stats([
       : `<div class="table-wrap"><table>
     <thead><tr>
       <th>Trabajador</th><th class="num">Servicios</th><th class="num">Facturado</th>
-      <th>Regla</th><th class="num">Su comisión</th><th class="num">Pendiente</th>
+      <th>Regla</th><th class="num">Su comisión</th><th class="num">A liquidar</th>
     </tr></thead>
     <tbody>
       ${rows
@@ -49,6 +85,8 @@ ${stats([
     </tr></tfoot>
   </table></div>`
   }
+  <p class="sub"><strong>A liquidar</strong> es lo que le debes ahora mismo a cada una: su comisión de lo que
+     aún no le has pagado.</p>
   <div class="actions" style="margin-top:14px">
     <a class="btn" href="/admin/liquidacion?month=${esc(month)}">Ver qué tengo que pagar</a>
     <a class="btn ghost" href="/admin/servicios?month=${esc(month)}">Ver todos los servicios</a>
@@ -171,14 +209,13 @@ function settlementCard(r, { from, to, onlyPending }) {
     }
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Fecha</th><th>Cliente</th><th>Pueblo</th><th class="num">Importe</th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Cliente</th><th class="num">Importe</th></tr></thead>
         <tbody>
           ${r.entries
             .map(
               (e) => `<tr>
             <td class="small nowrap">${esc(formatDateShort(e.service_date))}</td>
             <td>${esc(e.display_label)}</td>
-            <td class="small muted">${esc(e.town_name || '—')}</td>
             <td class="num">${money(e.amount_cents)}</td>
           </tr>`
             )
@@ -364,7 +401,7 @@ ${
   });
 }
 
-function adminEntries({ user, flash, warning, entries, workers, towns, filters, totalCents, today }) {
+function adminEntries({ user, flash, warning, entries, workers, filters, totalCents, today }) {
   const body = `
 <h1>Servicios</h1>
 
@@ -390,18 +427,6 @@ function adminEntries({ user, flash, warning, entries, workers, towns, filters, 
           .join('')}
       </select>
     </div>
-    <div>
-      <label for="town">Pueblo</label>
-      <select id="town" name="town">
-        <option value="">Todos</option>
-        ${towns
-          .map(
-            (t) =>
-              `<option value="${t.id}" ${String(filters.town) === String(t.id) ? 'selected' : ''}>${esc(t.name)}</option>`
-          )
-          .join('')}
-      </select>
-    </div>
     <div style="flex:0 0 auto"><button class="btn ghost" type="submit">Filtrar</button></div>
   </div>
 </form>
@@ -412,7 +437,7 @@ function adminEntries({ user, flash, warning, entries, workers, towns, filters, 
     entries.length === 0
       ? emptyState('No hay servicios con estos filtros.')
       : `<div class="table-wrap"><table>
-    <thead><tr><th>Fecha</th><th>Trabajador</th><th>Cliente</th><th>Pueblo</th><th>Pago</th><th class="num">Importe</th><th></th></tr></thead>
+    <thead><tr><th>Fecha</th><th>Trabajador</th><th>Cliente</th><th>Pago</th><th class="num">Importe</th><th></th></tr></thead>
     <tbody>
       ${entries
         .map(
@@ -420,8 +445,7 @@ function adminEntries({ user, flash, warning, entries, workers, towns, filters, 
         <td class="small nowrap">${esc(formatDateShort(e.service_date))}</td>
         <td>${esc(e.worker_name)}</td>
         <td>${esc(e.display_label)}${e.notes ? `<div class="small muted">${esc(e.notes)}</div>` : ''}</td>
-        <td class="small muted">${esc(e.town_name || '—')}</td>
-        <td class="small muted">${esc(e.payment_method)}</td>
+        <td class="small muted">${esc(metodoLegible(e.payment_method))}</td>
         <td class="num">${money(e.amount_cents)}</td>
         <td class="right">${
           e.settlement_id
@@ -432,7 +456,7 @@ function adminEntries({ user, flash, warning, entries, workers, towns, filters, 
         )
         .join('')}
     </tbody>
-    <tfoot><tr><td colspan="5">Total</td><td class="num">${money(totalCents)}</td><td></td></tr></tfoot>
+    <tfoot><tr><td colspan="4">Total</td><td class="num">${money(totalCents)}</td><td></td></tr></tfoot>
   </table></div>`
   }
   <div class="actions" style="margin-top:14px">
@@ -462,13 +486,6 @@ function adminEntries({ user, flash, warning, entries, workers, towns, filters, 
     </div>
     <div class="row">
       <div class="field">
-        <label for="a_town">Pueblo</label>
-        <select id="a_town" name="town_id">
-          <option value="">— Sin pueblo —</option>
-          ${towns.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}
-        </select>
-      </div>
-      <div class="field">
         <label for="a_client">Cliente (opcional)</label>
         <input id="a_client" name="client_label">
       </div>
@@ -486,7 +503,7 @@ function adminEntries({ user, flash, warning, entries, workers, towns, filters, 
   return layout({ title: 'Servicios', user, body, active: 'servicios', flash, warning });
 }
 
-function adminEntryForm({ user, flash, warning, entry, workers, towns, today }) {
+function adminEntryForm({ user, flash, warning, entry, workers, today }) {
   const body = `
 <h1>Editar servicio</h1>
 <div class="card">
@@ -515,18 +532,6 @@ function adminEntryForm({ user, flash, warning, entry, workers, towns, today }) 
       </div>
     </div>
     <div class="row">
-      <div class="field">
-        <label for="town_id">Pueblo</label>
-        <select id="town_id" name="town_id">
-          <option value="">— Sin pueblo —</option>
-          ${towns
-            .map(
-              (t) =>
-                `<option value="${t.id}" ${String(entry.town_id) === String(t.id) ? 'selected' : ''}>${esc(t.name)}</option>`
-            )
-            .join('')}
-        </select>
-      </div>
       <div class="field">
         <label for="client_label">Cliente</label>
         <input id="client_label" name="client_label" value="${esc(entry.client_label)}">
@@ -558,41 +563,130 @@ function adminEntryForm({ user, flash, warning, entry, workers, towns, today }) 
   return layout({ title: 'Editar servicio', user, body, active: 'servicios', flash, warning });
 }
 
-function adminTowns({ user, flash, warning, towns }) {
+
+function adminExpenses({ user, flash, warning, month, expenses, delMes, totalMesCents, proximos, editando }) {
+  const e = editando;
+  const hoy = new Date().toISOString().slice(0, 10);
+
   const body = `
-<h1>Pueblos</h1>
-<div class="card">
-  <h2>Añadir pueblo</h2>
-  <form method="post" action="/admin/pueblos">
+<h1>Gastos</h1>
+<p class="sub">Apunta aquí lo que paga la empresa. Los que se repiten se calculan solos: no hay que volver a meterlos cada mes.</p>
+
+${stats([
+  { k: `Gastos de ${monthLabel(month)}`, v: money(totalMesCents), sub: `${delMes.length} gasto(s)` },
+  {
+    k: 'Próximo gasto',
+    v: proximos.length ? money(proximos[0].amount_cents) : '—',
+    sub: proximos.length ? `${proximos[0].name} · ${formatDate(proximos[0].fecha)}` : 'nada a la vista',
+    accent: true,
+  },
+])}
+
+<div class="card" style="margin-top:16px">
+  <h2>${e ? 'Editar gasto' : 'Añadir un gasto'}</h2>
+  <form method="post" action="${e ? `/admin/gastos/${e.id}` : '/admin/gastos'}">
     <div class="row">
-      <div class="field" style="flex:1 1 240px">
-        <label for="name">Nombre</label>
-        <input id="name" name="name" required placeholder="Por ejemplo: Alcalá">
+      <div class="field" style="flex:2 1 240px">
+        <label for="g_name">Concepto</label>
+        <input id="g_name" name="name" required placeholder="Alquiler, gasolina, seguro..." value="${esc(e ? e.name : '')}">
       </div>
-      <div style="flex:0 0 auto;margin-bottom:14px"><button class="btn" type="submit">Añadir</button></div>
+      <div class="field">
+        <label for="g_amount">Importe</label>
+        <input id="g_amount" name="amount" inputmode="decimal" required placeholder="0,00"
+               value="${esc(e ? (e.amount_cents / 100).toFixed(2).replace('.', ',') : '')}">
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="g_kind">¿Cada cuánto se paga?</label>
+        <select id="g_kind" name="kind">
+          ${KINDS.map(
+            (k) => `<option value="${k}" ${(e ? e.kind : 'monthly') === k ? 'selected' : ''}>${esc(KIND_LABELS[k])}</option>`
+          ).join('')}
+        </select>
+      </div>
+      <div class="field">
+        <label for="g_date">${e && e.kind !== 'once' ? 'Fecha del primero' : 'Fecha'}</label>
+        <input id="g_date" name="anchor_date" type="date" required value="${esc(e ? e.anchor_date : hoy)}">
+        <div class="hint">Si se repite, pon la fecha del primer pago: las siguientes salen solas.</div>
+      </div>
+    </div>
+    <div class="field">
+      <label for="g_notes">Nota</label>
+      <input id="g_notes" name="notes" value="${esc(e ? e.notes : '')}" placeholder="Opcional">
+    </div>
+    ${
+      e
+        ? `<div class="field">
+      <label style="display:flex;align-items:center;gap:9px;font-weight:500;color:var(--ink)">
+        <input type="checkbox" name="active" value="1" ${e.active ? 'checked' : ''} style="width:auto">
+        Sigue vigente (desmárcalo para dejar de contarlo sin borrarlo)
+      </label>
+    </div>`
+        : ''
+    }
+    <div class="actions">
+      <button class="btn" type="submit">${e ? 'Guardar cambios' : 'Añadir gasto'}</button>
+      ${e ? '<a class="btn ghost" href="/admin/gastos">Cancelar</a>' : ''}
     </div>
   </form>
 </div>
+
 <div class="card">
-  <h2>Listado</h2>
-  <p class="sub">Los trabajadores eligen el pueblo de esta lista al apuntar un cobro.</p>
+  <h2>Lo que viene</h2>
+  <p class="sub">Próximos pagos de los tres meses que vienen.</p>
   ${
-    towns.length === 0
-      ? emptyState('Todavía no hay pueblos.')
-      : towns
-          .map(
-            (t) => `<form method="post" action="/admin/pueblos/${t.id}" class="item">
-    <input class="grow" name="name" value="${esc(t.name)}" aria-label="Nombre del pueblo">
-    <span class="small muted nowrap">${t.entry_count} servicio(s)</span>
-    <button class="btn ghost small" type="submit">Guardar</button>
-    <button class="btn ghost small" type="submit" name="toggle" value="1">${t.active ? 'Ocultar' : 'Recuperar'}</button>
-  </form>`
-          )
-          .join('')
+    proximos.length === 0
+      ? emptyState('No hay ningún gasto a la vista.')
+      : `<div class="table-wrap"><table>
+    <thead><tr><th>Fecha</th><th>Concepto</th><th>Repetición</th><th class="num">Importe</th></tr></thead>
+    <tbody>
+      ${proximos
+        .map(
+          (g) => `<tr>
+        <td class="nowrap">${esc(formatDate(g.fecha))}${g.fecha === hoy ? ' <span class="pill warn">hoy</span>' : ''}</td>
+        <td>${esc(g.name)}</td>
+        <td class="small muted">${esc(KIND_LABELS[g.kind])}</td>
+        <td class="num">${money(g.amount_cents)}</td>
+      </tr>`
+        )
+        .join('')}
+    </tbody>
+  </table></div>`
+  }
+</div>
+
+<div class="card">
+  <h2>Todos los gastos</h2>
+  ${
+    expenses.length === 0
+      ? emptyState('Todavía no has apuntado ningún gasto.')
+      : `<div class="table-wrap"><table>
+    <thead><tr><th>Concepto</th><th>Repetición</th><th>Próximo</th><th class="num">Importe</th><th></th></tr></thead>
+    <tbody>
+      ${expenses
+        .map(
+          (g) => `<tr>
+        <td>${esc(g.name)} ${g.active ? '' : '<span class="pill grey">En pausa</span>'}
+            ${g.notes ? `<div class="small muted">${esc(g.notes)}</div>` : ''}</td>
+        <td class="small muted">${esc(KIND_LABELS[g.kind])}</td>
+        <td class="small nowrap">${g.proximo ? esc(formatDate(g.proximo)) : '<span class="muted">—</span>'}</td>
+        <td class="num">${money(g.amount_cents)}</td>
+        <td class="right nowrap">
+          <a class="btn ghost small" href="/admin/gastos?editar=${g.id}">Editar</a>
+          <form method="post" action="/admin/gastos/${g.id}/borrar" class="inline">
+            <button class="btn ghost small" type="submit" data-confirm="¿Borrar el gasto &quot;${esc(g.name)}&quot;?">Borrar</button>
+          </form>
+        </td>
+      </tr>`
+        )
+        .join('')}
+    </tbody>
+  </table></div>`
   }
 </div>`;
 
-  return layout({ title: 'Pueblos', user, body, active: 'pueblos', flash, warning });
+  return layout({ title: 'Gastos', user, body, active: 'gastos', flash, warning });
 }
 
 function monthForm(action, month) {
@@ -613,10 +707,10 @@ function monthForm(action, month) {
 
 module.exports = {
   adminHome,
+  adminExpenses,
   adminSettlement,
   adminWorkers,
   adminWorkerForm,
   adminEntries,
   adminEntryForm,
-  adminTowns,
 };

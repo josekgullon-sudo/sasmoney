@@ -1,6 +1,6 @@
 'use strict';
 
-const { esc } = require('../util');
+const { esc, BRAND } = require('../util');
 
 /**
  * Envoltorio HTML común a todas las páginas.
@@ -20,7 +20,7 @@ function layout({ title, user, body, active = '', flash = [], warning = '' }) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f766e">
-<title>${esc(title)} · SasMoney</title>
+<title>${esc(title)} · ${esc(BRAND)}</title>
 <link rel="stylesheet" href="/styles.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💶</text></svg>">
 </head>
@@ -44,7 +44,7 @@ function nav(user, active) {
           ['/admin/liquidacion', 'Liquidación', 'liquidacion'],
           ['/admin/trabajadores', 'Trabajadores', 'trabajadores'],
           ['/admin/servicios', 'Servicios', 'servicios'],
-          ['/admin/pueblos', 'Pueblos', 'pueblos'],
+          ['/admin/gastos', 'Gastos', 'gastos'],
         ]
       : [
           ['/', 'Hoy', 'hoy'],
@@ -54,7 +54,7 @@ function nav(user, active) {
 
   return `<header class="topbar">
   <div class="topbar-inner">
-    <a class="brand" href="${user.role === 'admin' ? '/admin' : '/'}">💶 SasMoney</a>
+    <a class="brand" href="${user.role === 'admin' ? '/admin' : '/'}">💶 ${esc(BRAND)}</a>
     <div class="topbar-right">
       <span class="who">${esc(user.name)}${
         user.role === 'admin' && user.name.trim().toLowerCase() !== 'jefe' ? ' · jefe' : ''

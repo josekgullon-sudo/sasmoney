@@ -109,6 +109,21 @@ CREATE TABLE IF NOT EXISTS entries (
 CREATE INDEX IF NOT EXISTS idx_entries_user_date ON entries(user_id, service_date);
 CREATE INDEX IF NOT EXISTS idx_entries_settlement ON entries(settlement_id);
 
+CREATE TABLE IF NOT EXISTS expenses (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  name         TEXT    NOT NULL,
+  amount_cents INTEGER NOT NULL CHECK (amount_cents >= 0),
+  -- 'once' = un pago suelto; el resto se repiten solos.
+  kind         TEXT    NOT NULL CHECK (kind IN ('once','monthly','quarterly','yearly')),
+  -- Fecha del pago suelto, o fecha del primero si se repite.
+  anchor_date  TEXT    NOT NULL,
+  active       INTEGER NOT NULL DEFAULT 1,
+  notes        TEXT    NOT NULL DEFAULT '',
+  created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_expenses_active ON expenses(active, anchor_date);
+
 CREATE TABLE IF NOT EXISTS sessions (
   token      TEXT PRIMARY KEY,
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

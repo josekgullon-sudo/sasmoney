@@ -1,6 +1,6 @@
 'use strict';
 
-const { esc } = require('../util');
+const { esc, BRAND } = require('../util');
 const { formatEuro } = require('../commission');
 const { layout } = require('./layout');
 
@@ -11,14 +11,14 @@ function loginPage({ error = '', next = '', hint = '' }) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f766e">
-<title>Entrar · SasMoney</title>
+<title>Entrar · ${esc(BRAND)}</title>
 <link rel="stylesheet" href="/styles.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💶</text></svg>">
 </head>
 <body>
 <div class="login-wrap">
   <div class="login-logo">💶</div>
-  <h1 class="login-title">SasMoney</h1>
+  <h1 class="login-title">${esc(BRAND)}</h1>
   ${error ? `<div class="banner error">${esc(error)}</div>` : ''}
   ${hint ? `<div class="banner warn">${hint}</div>` : ''}
   <div class="card">

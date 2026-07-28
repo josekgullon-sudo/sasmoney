@@ -11,8 +11,9 @@ const {
   COMMISSION_TYPES,
 } = require('../commission');
 const { todayISO, currentMonth, monthRange, isValidDate, formatDate } = require('../util');
+const expenses = require('../expenses');
 const views = require('../views/admin');
-const { PAYMENT_METHODS } = require('../views/worker');
+const { PAYMENT_METHODS, metodoLegible } = require('../views/worker');
 
 const router = express.Router();
 router.use(requireAdmin);
@@ -44,6 +45,10 @@ router.get('/', (req, res) => {
     { count: 0, totalCents: 0, commissionCents: 0, companyCents: 0 }
   );
 
+  const delMes = expenses.monthExpenses(month);
+  const hoy = todayISO();
+  const proximos = expenses.upcoming({ dias: 92 });
+
   res.send(
     views.adminHome({
       user: req.user,
@@ -53,6 +58,12 @@ router.get('/', (req, res) => {
       rows: rows.sort((a, b) => b.totalCents - a.totalCents),
       totals,
       pendingTotalCents: rows.reduce((a, r) => a + r.pendingCommissionCents, 0),
+      gastos: {
+        delMes,
+        totalCents: delMes.reduce((a, g) => a + g.amount_cents, 0),
+        pendientesCents: delMes.filter((g) => g.fecha > hoy).reduce((a, g) => a + g.amount_cents, 0),
+        proximo: proximos[0] || null,
+      },
     })
   );
 });
@@ -311,13 +322,11 @@ router.get('/servicios', (req, res) => {
   const month = validMonth(req.query.month);
   const { from, to } = monthRange(month);
   const worker = req.query.worker ? Number(req.query.worker) : null;
-  const town = req.query.town ? Number(req.query.town) : null;
 
-  const entries = repo.listEntries({ userId: worker || null, from, to, townId: town || null });
+  const entries = repo.listEntries({ userId: worker || null, from, to });
   const qs = new URLSearchParams({
     month,
     ...(worker ? { worker: String(worker) } : {}),
-    ...(town ? { town: String(town) } : {}),
   }).toString();
 
   res.send(
@@ -327,8 +336,7 @@ router.get('/servicios', (req, res) => {
       warning: res.locals.warning,
       entries,
       workers: repo.listWorkers({ includeInactive: true }),
-      towns: repo.listTowns(),
-      filters: { month, worker, town, qs },
+      filters: { month, worker, qs },
       totalCents: entries.reduce((a, e) => a + e.amount_cents, 0),
       today: todayISO(),
     })
@@ -342,17 +350,15 @@ router.get('/servicios.csv', (req, res) => {
     userId: req.query.worker ? Number(req.query.worker) : null,
     from,
     to,
-    townId: req.query.town ? Number(req.query.town) : null,
   });
 
-  const lines = [['Fecha', 'Trabajador', 'Cliente', 'Pueblo', 'Pago', 'Importe', 'Nota', 'Liquidado']];
+  const lines = [['Fecha', 'Trabajador', 'Cliente', 'Pago', 'Importe', 'Nota', 'Liquidado']];
   for (const e of entries) {
     lines.push([
       formatDate(e.service_date),
       e.worker_name,
       e.display_label,
-      e.town_name || '',
-      e.payment_method,
+      metodoLegible(e.payment_method),
       euros(e.amount_cents),
       e.notes,
       e.settlement_id ? 'Sí' : 'No',
@@ -392,7 +398,6 @@ router.get('/servicios/:id', (req, res) => {
       warning: res.locals.warning,
       entry,
       workers: repo.listWorkers({ includeInactive: true }),
-      towns: repo.listTowns(),
       today: todayISO(),
     })
   );
@@ -433,60 +438,85 @@ router.post('/servicios/:id/borrar', (req, res) => {
   res.redirect('/admin/servicios');
 });
 
-/* ------------------------------------------------------------------ Pueblos */
+/* ------------------------------------------------------------------- Gastos */
 
-router.get('/pueblos', (req, res) => {
+/** Lee y valida el formulario de un gasto. */
+function readExpenseForm(body) {
+  const name = String(body.name || '').trim().slice(0, 80);
+  if (!name) return { error: 'Ponle un concepto al gasto.' };
+
+  const amount_cents = parseAmountToCents(body.amount);
+  if (amount_cents === null) return { error: 'Escribe un importe válido, por ejemplo 120 o 120,50.' };
+  if (amount_cents === 0) return { error: 'El importe no puede ser 0 €.' };
+
+  const kind = expenses.KINDS.includes(body.kind) ? body.kind : 'monthly';
+  const anchor_date = String(body.anchor_date || '').trim();
+  if (!isValidDate(anchor_date)) return { error: 'La fecha no es válida.' };
+
+  return {
+    data: { name, amount_cents, kind, anchor_date, notes: String(body.notes || '').trim().slice(0, 200) },
+  };
+}
+
+router.get('/gastos', (req, res) => {
+  const month = validMonth(req.query.month);
+  const delMes = expenses.monthExpenses(month);
+  const proximos = expenses.upcoming({ dias: 92 });
+
+  // A cada gasto se le calcula cuándo toca el siguiente pago.
+  const todos = expenses.listExpenses().map((g) => ({
+    ...g,
+    proximo: g.active ? expenses.nextDate(g) : null,
+  }));
+
+  const editar = req.query.editar ? expenses.getExpense(Number(req.query.editar)) : null;
+
   res.send(
-    views.adminTowns({
+    views.adminExpenses({
       user: req.user,
       flash: res.locals.flash,
       warning: res.locals.warning,
-      towns: repo.listTowns({ includeInactive: true }),
+      month,
+      expenses: todos,
+      delMes,
+      totalMesCents: delMes.reduce((a, g) => a + g.amount_cents, 0),
+      proximos,
+      editando: editar || null,
     })
   );
 });
 
-router.post('/pueblos', (req, res) => {
-  const name = String(req.body.name || '').trim().slice(0, 60);
-  if (!name) {
-    res.flash('error', 'Escribe el nombre del pueblo.');
-    return res.redirect('/admin/pueblos');
+router.post('/gastos', (req, res) => {
+  const { data, error } = readExpenseForm(req.body);
+  if (error) {
+    res.flash('error', error);
+    return res.redirect('/admin/gastos');
   }
-  const exists = db.prepare('SELECT id FROM towns WHERE name = ? COLLATE NOCASE').get(name);
-  if (exists) {
-    db.prepare('UPDATE towns SET active = 1 WHERE id = ?').run(exists.id);
-    res.flash('ok', 'Ese pueblo ya estaba: lo he vuelto a activar.');
-  } else {
-    db.prepare('INSERT INTO towns (name) VALUES (?)').run(name);
-    res.flash('ok', `Pueblo "${name}" añadido.`);
-  }
-  res.redirect('/admin/pueblos');
+  expenses.createExpense(data);
+  res.flash('ok', `Gasto "${data.name}" añadido.`);
+  res.redirect('/admin/gastos');
 });
 
-router.post('/pueblos/:id', (req, res) => {
-  const town = db.prepare('SELECT * FROM towns WHERE id = ?').get(Number(req.params.id));
-  if (!town) return res.status(404).send('Pueblo no encontrado.');
+router.post('/gastos/:id', (req, res) => {
+  const gasto = expenses.getExpense(Number(req.params.id));
+  if (!gasto) return res.status(404).send('Gasto no encontrado.');
 
-  if (req.body.toggle) {
-    db.prepare('UPDATE towns SET active = ? WHERE id = ?').run(town.active ? 0 : 1, town.id);
-    res.flash('ok', town.active ? 'Pueblo oculto.' : 'Pueblo recuperado.');
-    return res.redirect('/admin/pueblos');
+  const { data, error } = readExpenseForm(req.body);
+  if (error) {
+    res.flash('error', error);
+    return res.redirect(`/admin/gastos?editar=${gasto.id}`);
   }
+  expenses.updateExpense(gasto.id, { ...data, active: req.body.active ? 1 : 0 });
+  res.flash('ok', 'Gasto guardado.');
+  res.redirect('/admin/gastos');
+});
 
-  const name = String(req.body.name || '').trim().slice(0, 60);
-  if (!name) {
-    res.flash('error', 'El nombre no puede quedar vacío.');
-    return res.redirect('/admin/pueblos');
-  }
-  const clash = db.prepare('SELECT id FROM towns WHERE name = ? COLLATE NOCASE AND id <> ?').get(name, town.id);
-  if (clash) {
-    res.flash('error', 'Ya hay otro pueblo con ese nombre.');
-    return res.redirect('/admin/pueblos');
-  }
-
-  db.prepare('UPDATE towns SET name = ? WHERE id = ?').run(name, town.id);
-  res.flash('ok', 'Pueblo guardado.');
-  res.redirect('/admin/pueblos');
+router.post('/gastos/:id/borrar', (req, res) => {
+  const gasto = expenses.getExpense(Number(req.params.id));
+  if (!gasto) return res.status(404).send('Gasto no encontrado.');
+  expenses.deleteExpense(gasto.id);
+  res.flash('ok', `Gasto "${gasto.name}" borrado.`);
+  res.redirect('/admin/gastos');
 });
 
 /* ------------------------------------------------------------------ Ayudas */
@@ -499,12 +529,11 @@ function readAdminEntryForm(body) {
   let service_date = String(body.service_date || '').trim() || today;
   if (!isValidDate(service_date)) service_date = today;
 
-  const town_id = body.town_id ? Number(body.town_id) : null;
   return {
     data: {
       amount_cents,
       service_date,
-      town_id: Number.isInteger(town_id) && town_id > 0 ? town_id : null,
+      town_id: null,
       client_label: String(body.client_label || '').trim().slice(0, 80),
       payment_method: METHODS.includes(body.payment_method) ? body.payment_method : 'efectivo',
       notes: String(body.notes || '').trim().slice(0, 200),
