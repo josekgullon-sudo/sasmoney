@@ -121,76 +121,104 @@ function entryItem(e, { showWorker = false } = {}) {
 </div>`;
 }
 
-function workerEntries({ user, flash, warning, month, entries, totalCents, commissionCents }) {
+/**
+ * Una sola pantalla con todo lo del trabajador en un mes: lo que ha cobrado,
+ * lo que va a ganar, cómo sale esa cuenta y qué le han pagado ya.
+ * Antes esto estaba partido en dos pantallas que enseñaban casi lo mismo.
+ */
+function workerAccount({
+  user, flash, warning, month, entries, totalCents, calc, pendingCents, settlements, historial,
+}) {
   const byDate = new Map();
   for (const e of entries) {
     if (!byDate.has(e.service_date)) byDate.set(e.service_date, []);
     byDate.get(e.service_date).push(e);
   }
 
+  const maxHistorial = Math.max(1, ...historial.map((h) => h.commissionCents));
+
   const body = `
-<h1>Mis servicios</h1>
-${monthPicker('/mis-servicios', month)}
+<h1>Mis cuentas</h1>
+${monthPicker('/mis-cuentas', month)}
 
 ${stats([
   { k: 'Facturado', v: money(totalCents), sub: `${entries.length} servicio(s)` },
-  { k: 'Tu parte', v: money(commissionCents), sub: ruleLabel(user), accent: true },
-])}
-
-${
-  entries.length === 0
-    ? `<div class="card">${emptyState('No hay servicios en este mes.')}</div>`
-    : [...byDate.entries()]
-        .map(
-          ([date, list]) => `<div class="card">
-  <h2>${esc(formatDateShort(date))}</h2>
-  <p class="sub">${list.length} servicio(s) · ${money(list.reduce((a, e) => a + e.amount_cents, 0))}</p>
-  ${list.map((e) => entryItem(e)).join('')}
-</div>`
-        )
-        .join('')
-}`;
-
-  return layout({ title: 'Mis servicios', user, body, active: 'servicios', flash, warning });
-}
-
-function workerEarnings({ user, flash, warning, month, totalCents, count, calc, pendingCents, settlements }) {
-  const body = `
-<h1>Mis ganancias</h1>
-${monthPicker('/mis-ganancias', month)}
-
-${stats([
-  { k: 'Facturado', v: money(totalCents), sub: `${count} servicio(s)` },
-  { k: 'Tu comisión', v: money(calc.commissionCents), sub: calc.label, accent: true },
+  { k: 'Has ganado', v: money(calc.commissionCents), sub: ruleLabel(user), accent: true },
+  { k: 'Te deben', v: money(pendingCents), sub: 'aún sin liquidar' },
 ])}
 
 <div class="card" style="margin-top:16px">
-  <h2>Cómo sale tu comisión</h2>
-  <p class="sub">Regla que te ha puesto el jefe: <strong>${esc(ruleLabel(user))}</strong></p>
+  <h2>Cómo sale tu parte</h2>
   <div class="table-wrap">
     <table>
       <tbody>
         ${calc.breakdown
           .map((b) => `<tr><td>${esc(b.concept)}</td><td class="num">${money(b.amountCents)}</td></tr>`)
           .join('')}
-        <tr><td><strong>Total ${esc(monthLabel(month))}</strong></td><td class="num"><strong>${money(
-          calc.commissionCents
-        )}</strong></td></tr>
+        <tr><td><strong>Total de ${esc(monthLabel(month))}</strong></td>
+            <td class="num"><strong>${money(calc.commissionCents)}</strong></td></tr>
       </tbody>
     </table>
   </div>
   ${
     pendingCents !== calc.commissionCents
-      ? `<p class="sub" style="margin-top:12px">Pendiente de cobrar de este mes: <strong>${money(pendingCents)}</strong> (el resto ya te lo han liquidado).</p>`
+      ? `<p class="sub" style="margin-top:12px">De ese total, <strong>${money(
+          pendingCents
+        )}</strong> están pendientes de cobrar; el resto ya te lo han liquidado.</p>`
       : ''
   }
 </div>
 
 <div class="card">
-  <h2>Liquidaciones que ya te han pagado</h2>
+  <h2>Tus últimos meses</h2>
+  <p class="sub">Lo que has ganado cada mes, para que veas cómo va la cosa.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Mes</th><th class="num hide-narrow">Servicios</th><th class="num">Facturado</th><th class="num">Ganado</th><th class="hide-narrow"></th></tr></thead>
+      <tbody>
+        ${historial
+          .map(
+            (h) => `<tr${h.month === month ? ' style="background:var(--brand-soft)"' : ''}>
+          <td class="nowrap"><a href="/mis-cuentas?month=${h.month}">${esc(monthLabel(h.month))}</a></td>
+          <td class="num hide-narrow">${h.count}</td>
+          <td class="num">${money(h.totalCents)}</td>
+          <td class="num"><strong>${money(h.commissionCents)}</strong></td>
+          <td class="hide-narrow" style="width:34%">
+            <div style="background:var(--brand);height:9px;border-radius:5px;width:${Math.round(
+              (h.commissionCents / maxHistorial) * 100
+            )}%;min-width:2px"></div>
+          </td>
+        </tr>`
+          )
+          .join('')}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Lo que has apuntado en ${esc(monthLabel(month))}</h2>
+  ${
+    entries.length === 0
+      ? emptyState('No hay servicios en este mes.')
+      : [...byDate.entries()]
+          .map(
+            ([date, list]) => `<details class="box" ${date === entries[0].service_date ? 'open' : ''}>
+    <summary>${esc(formatDateShort(date))} · ${list.length} servicio(s) · ${money(
+      list.reduce((a, e) => a + e.amount_cents, 0)
+    )}</summary>
+    ${list.map((e) => entryItem(e)).join('')}
+  </details>`
+          )
+          .join('')
+  }
+</div>
+
+<div class="card">
+  <h2>Lo que ya te han pagado</h2>
   ${
     settlements.length === 0
-      ? emptyState('Todavía no hay liquidaciones cerradas.')
+      ? emptyState('Todavía no te han cerrado ninguna liquidación.')
       : `<div class="table-wrap"><table>
     <thead><tr><th>Periodo</th><th class="num">Servicios</th><th class="num">Facturado</th><th class="num">Cobrado</th></tr></thead>
     <tbody>
@@ -209,7 +237,7 @@ ${stats([
   }
 </div>`;
 
-  return layout({ title: 'Mis ganancias', user, body, active: 'ganancias', flash, warning });
+  return layout({ title: 'Mis cuentas', user, body, active: 'cuentas', flash, warning });
 }
 
 function workerEditEntry({ user, flash, warning, entry, today }) {
@@ -225,7 +253,7 @@ function workerEditEntry({ user, flash, warning, entry, today }) {
     <button class="btn danger" type="submit" data-confirm="¿Seguro que quieres borrar este servicio?">Borrar servicio</button>
   </form>
 </div>
-<p><a href="/mis-servicios">← Volver</a></p>`;
+<p><a href="/mis-cuentas">← Volver</a></p>`;
 
   return layout({ title: 'Editar servicio', user, body, active: 'servicios', flash, warning });
 }
@@ -252,8 +280,7 @@ module.exports = {
   PAYMENT_METHODS,
   metodoLegible,
   workerHome,
-  workerEntries,
-  workerEarnings,
+  workerAccount,
   workerEditEntry,
   entryItem,
   monthPicker,

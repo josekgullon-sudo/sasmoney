@@ -254,6 +254,8 @@ details.box > *:not(summary) { margin-top: 10px; }
 
 @media (max-width: 560px) {
   .who { display: none; }
+  /* En el móvil no cabe todo: se esconde lo accesorio antes que recortar cifras. */
+  .hide-narrow { display: none; }
   .card { padding: 15px; }
   .stat .v { font-size: 1.3rem; }
   th, td { padding: 10px 8px; }

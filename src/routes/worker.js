@@ -4,7 +4,7 @@ const express = require('express');
 const { requireLogin } = require('../auth');
 const repo = require('../repo');
 const { calcCommission, parseAmountToCents, formatEuro } = require('../commission');
-const { todayISO, currentMonth, monthRange, isValidDate } = require('../util');
+const { todayISO, currentMonth, monthRange, recentMonths, isValidDate } = require('../util');
 const views = require('../views/worker');
 const { PAYMENT_METHODS } = require('../views/worker');
 
@@ -86,7 +86,7 @@ router.get('/servicios/:id/editar', requireLogin, (req, res) => {
   if (!entry || entry.user_id !== req.user.id) return res.status(404).send('Servicio no encontrado.');
   if (entry.settlement_id) {
     res.flash('error', 'Ese servicio ya está liquidado: habla con el jefe si hay que corregirlo.');
-    return res.redirect('/mis-servicios');
+    return res.redirect('/mis-cuentas');
   }
 
   res.send(
@@ -105,7 +105,7 @@ router.post('/servicios/:id', requireLogin, (req, res) => {
   if (!entry || entry.user_id !== req.user.id) return res.status(404).send('Servicio no encontrado.');
   if (entry.settlement_id) {
     res.flash('error', 'Ese servicio ya está liquidado y no se puede tocar.');
-    return res.redirect('/mis-servicios');
+    return res.redirect('/mis-cuentas');
   }
 
   const { data, error } = readEntryForm(req.body, { today: todayISO() });
@@ -116,7 +116,7 @@ router.post('/servicios/:id', requireLogin, (req, res) => {
 
   repo.updateEntry(entry.id, { ...data, user_id: null });
   res.flash('ok', 'Servicio actualizado.');
-  res.redirect('/mis-servicios');
+  res.redirect('/mis-cuentas');
 });
 
 router.post('/servicios/:id/borrar', requireLogin, (req, res) => {
@@ -124,63 +124,64 @@ router.post('/servicios/:id/borrar', requireLogin, (req, res) => {
   if (!entry || entry.user_id !== req.user.id) return res.status(404).send('Servicio no encontrado.');
   if (entry.settlement_id) {
     res.flash('error', 'Ese servicio ya está liquidado y no se puede borrar.');
-    return res.redirect('/mis-servicios');
+    return res.redirect('/mis-cuentas');
   }
 
   repo.deleteEntry(entry.id);
   res.flash('ok', 'Servicio borrado.');
-  res.redirect('/mis-servicios');
+  res.redirect('/mis-cuentas');
 });
 
-router.get('/mis-servicios', requireLogin, (req, res) => {
-  if (req.user.role === 'admin') return res.redirect('/admin/servicios');
+router.get('/mis-cuentas', requireLogin, (req, res) => {
+  if (req.user.role === 'admin') return res.redirect('/admin/liquidacion');
 
-  const month = String(req.query.month || currentMonth());
+  const month = validMonth(req.query.month);
   const { from, to } = monthRange(month);
+
   const entries = repo.listEntries({ userId: req.user.id, from, to });
   const totalCents = entries.reduce((a, e) => a + e.amount_cents, 0);
   const calc = calcCommission(req.user, { totalCents, serviceCount: entries.length });
 
-  res.send(
-    views.workerEntries({
-      user: req.user,
-      flash: res.locals.flash,
-      warning: res.locals.warning,
-      month: from.slice(0, 7),
-      entries,
-      totalCents,
-      commissionCents: calc.commissionCents,
-    })
-  );
-});
-
-router.get('/mis-ganancias', requireLogin, (req, res) => {
-  if (req.user.role === 'admin') return res.redirect('/admin/liquidacion');
-
-  const month = String(req.query.month || currentMonth());
-  const { from, to } = monthRange(month);
-
-  const all = repo.totalsFor({ userId: req.user.id, from, to });
   const pending = repo.totalsFor({ userId: req.user.id, from, to, pendingOnly: true });
-  const calc = calcCommission(req.user, { totalCents: all.totalCents, serviceCount: all.count });
   const pendingCalc = calcCommission(req.user, {
     totalCents: pending.totalCents,
     serviceCount: pending.count,
   });
 
+  // Los últimos seis meses, para poder compararse consigo misma.
+  const historial = recentMonths(6).map((m) => {
+    const r = monthRange(m);
+    const t = repo.totalsFor({ userId: req.user.id, from: r.from, to: r.to });
+    const c = calcCommission(req.user, { totalCents: t.totalCents, serviceCount: t.count });
+    return { month: m, count: t.count, totalCents: t.totalCents, commissionCents: c.commissionCents };
+  });
+
   res.send(
-    views.workerEarnings({
+    views.workerAccount({
       user: req.user,
       flash: res.locals.flash,
       warning: res.locals.warning,
-      month: from.slice(0, 7),
-      totalCents: all.totalCents,
-      count: all.count,
+      month,
+      entries,
+      totalCents,
       calc,
       pendingCents: pendingCalc.commissionCents,
       settlements: repo.listSettlements({ userId: req.user.id, limit: 24 }),
+      historial,
     })
   );
 });
+
+// Las direcciones antiguas siguen funcionando, por si alguien las tenía guardadas.
+router.get(['/mis-servicios', '/mis-ganancias'], requireLogin, (req, res) => {
+  const q = req.query.month ? `?month=${encodeURIComponent(String(req.query.month))}` : '';
+  res.redirect(`/mis-cuentas${q}`);
+});
+
+/** Un mes con formato correcto, o el actual. */
+function validMonth(value) {
+  const m = String(value || '');
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(m) ? m : currentMonth();
+}
 
 module.exports = router;

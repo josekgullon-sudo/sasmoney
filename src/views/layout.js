@@ -48,8 +48,7 @@ function nav(user, active) {
         ]
       : [
           ['/', 'Hoy', 'hoy'],
-          ['/mis-servicios', 'Mis servicios', 'servicios'],
-          ['/mis-ganancias', 'Mis ganancias', 'ganancias'],
+          ['/mis-cuentas', 'Mis cuentas', 'cuentas'],
         ];
 
   return `<header class="topbar">

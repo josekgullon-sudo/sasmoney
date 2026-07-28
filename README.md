@@ -19,7 +19,9 @@ Pensada para usarse desde el móvil: apuntar un cobro son dos toques.
      (*Cliente 1*, *Cliente 2*…). Si quiere, puede poner un nombre o un mote.
    - La fecha, el método de pago y las notas están escondidos en *Más detalles*,
      porque casi nunca hacen falta.
-3. En *Mis ganancias* ve en todo momento lo que lleva ganado ese mes y cómo sale la cuenta.
+3. En *Mis cuentas* tiene todo lo suyo en una sola pantalla: lo facturado del mes, lo que
+   lleva ganado, cómo sale esa cuenta, lo que aún le deben, la comparación con los meses
+   anteriores, los servicios apuntados y las liquidaciones que ya le han pagado.
 
 ### Para el jefe
 
