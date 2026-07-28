@@ -45,6 +45,7 @@ function nav(user, active) {
           ['/admin/trabajadores', 'Trabajadores', 'trabajadores'],
           ['/admin/servicios', 'Servicios', 'servicios'],
           ['/admin/gastos', 'Gastos', 'gastos'],
+          ['/admin/ingresos', 'Ingresos', 'ingresos'],
         ]
       : [
           ['/', 'Hoy', 'hoy'],

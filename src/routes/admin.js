@@ -45,9 +45,10 @@ router.get('/', (req, res) => {
     { count: 0, totalCents: 0, commissionCents: 0, companyCents: 0 }
   );
 
-  const delMes = expenses.monthExpenses(month);
+  const delMes = expenses.monthExpenses(month, 'out');
   const hoy = todayISO();
-  const proximos = expenses.upcoming({ dias: 92 });
+  const proximos = expenses.upcoming({ dias: 92, direction: 'out' });
+  const ingresosMes = expenses.monthExpenses(month, 'in');
 
   res.send(
     views.adminHome({
@@ -63,6 +64,10 @@ router.get('/', (req, res) => {
         totalCents: delMes.reduce((a, g) => a + g.amount_cents, 0),
         pendientesCents: delMes.filter((g) => g.fecha > hoy).reduce((a, g) => a + g.amount_cents, 0),
         proximo: proximos[0] || null,
+      },
+      ingresos: {
+        delMes: ingresosMes,
+        totalCents: ingresosMes.reduce((a, g) => a + g.amount_cents, 0),
       },
     })
   );
@@ -472,66 +477,85 @@ function readExpenseForm(body) {
   };
 }
 
-router.get('/gastos', (req, res) => {
-  const month = validMonth(req.query.month);
-  const delMes = expenses.monthExpenses(month);
-  const proximos = expenses.upcoming({ dias: 92 });
+/**
+ * Gastos e ingresos comparten pantalla y rutas: sólo cambia la dirección del
+ * dinero y las palabras. Así no hay dos copias de lo mismo que mantener.
+ */
+function montarMovimientos(direction) {
+  // Ruta dentro del router, que ya cuelga de /admin.
+  const ruta = direction === 'in' ? '/ingresos' : '/gastos';
+  const url = `/admin${ruta}`;
+  const palabra = direction === 'in' ? 'Ingreso' : 'Gasto';
 
-  // A cada gasto se le calcula cuándo toca el siguiente pago.
-  const todos = expenses.listExpenses().map((g) => ({
-    ...g,
-    proximo: g.active ? expenses.nextDate(g) : null,
-  }));
+  router.get(ruta, (req, res) => {
+    const month = validMonth(req.query.month);
+    const delMes = expenses.monthExpenses(month, direction);
+    const proximos = expenses.upcoming({ dias: 92, direction });
 
-  const editar = req.query.editar ? expenses.getExpense(Number(req.query.editar)) : null;
+    // A cada apunte se le calcula cuándo toca el siguiente.
+    const todos = expenses.listExpenses({ direction }).map((g) => ({
+      ...g,
+      proximo: g.active ? expenses.nextDate(g) : null,
+    }));
 
-  res.send(
-    views.adminExpenses({
-      user: req.user,
-      flash: res.locals.flash,
-      warning: res.locals.warning,
-      month,
-      expenses: todos,
-      delMes,
-      totalMesCents: delMes.reduce((a, g) => a + g.amount_cents, 0),
-      proximos,
-      editando: editar || null,
-    })
-  );
-});
+    // Sólo se abre para editar si es de esta pantalla: un gasto no se edita
+    // desde ingresos ni al revés.
+    const pedido = req.query.editar ? expenses.getExpense(Number(req.query.editar)) : null;
+    const editar = pedido && pedido.direction === direction ? pedido : null;
 
-router.post('/gastos', (req, res) => {
-  const { data, error } = readExpenseForm(req.body);
-  if (error) {
-    res.flash('error', error);
-    return res.redirect('/admin/gastos');
-  }
-  expenses.createExpense(data);
-  res.flash('ok', `Gasto "${data.name}" añadido.`);
-  res.redirect('/admin/gastos');
-});
+    res.send(
+      views.adminExpenses({
+        user: req.user,
+        flash: res.locals.flash,
+        warning: res.locals.warning,
+        month,
+        direction,
+        expenses: todos,
+        delMes,
+        totalMesCents: delMes.reduce((a, g) => a + g.amount_cents, 0),
+        proximos,
+        editando: editar,
+        hoy: todayISO(),
+      })
+    );
+  });
 
-router.post('/gastos/:id', (req, res) => {
-  const gasto = expenses.getExpense(Number(req.params.id));
-  if (!gasto) return res.status(404).send('Gasto no encontrado.');
+  router.post(ruta, (req, res) => {
+    const { data, error } = readExpenseForm(req.body);
+    if (error) {
+      res.flash('error', error);
+      return res.redirect(url);
+    }
+    expenses.createExpense({ ...data, direction });
+    res.flash('ok', `${palabra} "${data.name}" añadido.`);
+    res.redirect(url);
+  });
 
-  const { data, error } = readExpenseForm(req.body);
-  if (error) {
-    res.flash('error', error);
-    return res.redirect(`/admin/gastos?editar=${gasto.id}`);
-  }
-  expenses.updateExpense(gasto.id, { ...data, active: req.body.active ? 1 : 0 });
-  res.flash('ok', 'Gasto guardado.');
-  res.redirect('/admin/gastos');
-});
+  router.post(`${ruta}/:id`, (req, res) => {
+    const mov = expenses.getExpense(Number(req.params.id));
+    if (!mov || mov.direction !== direction) return res.status(404).send('No encontrado.');
 
-router.post('/gastos/:id/borrar', (req, res) => {
-  const gasto = expenses.getExpense(Number(req.params.id));
-  if (!gasto) return res.status(404).send('Gasto no encontrado.');
-  expenses.deleteExpense(gasto.id);
-  res.flash('ok', `Gasto "${gasto.name}" borrado.`);
-  res.redirect('/admin/gastos');
-});
+    const { data, error } = readExpenseForm(req.body);
+    if (error) {
+      res.flash('error', error);
+      return res.redirect(`${url}?editar=${mov.id}`);
+    }
+    expenses.updateExpense(mov.id, { ...data, active: req.body.active ? 1 : 0 });
+    res.flash('ok', `${palabra} guardado.`);
+    res.redirect(url);
+  });
+
+  router.post(`${ruta}/:id/borrar`, (req, res) => {
+    const mov = expenses.getExpense(Number(req.params.id));
+    if (!mov || mov.direction !== direction) return res.status(404).send('No encontrado.');
+    expenses.deleteExpense(mov.id);
+    res.flash('ok', `${palabra} "${mov.name}" borrado.`);
+    res.redirect(url);
+  });
+}
+
+montarMovimientos('out');
+montarMovimientos('in');
 
 /* ------------------------------------------------------------------ Ayudas */
 

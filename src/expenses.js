@@ -4,7 +4,11 @@ const { db } = require('./db');
 const { todayISO, monthRange } = require('./util');
 
 /**
- * Gastos de la empresa.
+ * Movimientos de caja de la empresa: gastos ('out') y otros ingresos ('in').
+ *
+ * Los dos funcionan igual —pueden ser sueltos o repetirse solos—, así que
+ * comparten tabla y cálculo de fechas; sólo cambia el signo con el que entran
+ * en el resumen del mes.
  *
  * Hay dos clases:
  *   - 'once'      un pago suelto, en una fecha concreta.
@@ -75,10 +79,12 @@ function dateInMonth(expense, month) {
   return fecha && fecha <= to ? fecha : null;
 }
 
-function listExpenses({ includeInactive = true } = {}) {
+const DIRECTIONS = ['out', 'in'];
+
+function listExpenses({ direction = 'out' } = {}) {
   return db
-    .prepare(`SELECT * FROM expenses ${includeInactive ? '' : 'WHERE active = 1'} ORDER BY anchor_date DESC, id DESC`)
-    .all();
+    .prepare('SELECT * FROM expenses WHERE direction = ? ORDER BY anchor_date DESC, id DESC')
+    .all(direction);
 }
 
 function getExpense(id) {
@@ -88,10 +94,10 @@ function getExpense(id) {
 function createExpense(data) {
   const info = db
     .prepare(
-      `INSERT INTO expenses (name, amount_cents, kind, anchor_date, notes)
-       VALUES (@name, @amount_cents, @kind, @anchor_date, @notes)`
+      `INSERT INTO expenses (name, amount_cents, kind, anchor_date, notes, direction)
+       VALUES (@name, @amount_cents, @kind, @anchor_date, @notes, @direction)`
     )
-    .run(data);
+    .run({ direction: 'out', ...data });
   return Number(info.lastInsertRowid);
 }
 
@@ -111,9 +117,9 @@ function deleteExpense(id) {
  * Gastos que caen en un mes, con la fecha concreta de cada uno.
  * Los inactivos quedan fuera: son los que has puesto en pausa.
  */
-function monthExpenses(month) {
+function monthExpenses(month, direction = 'out') {
   const rows = [];
-  for (const e of listExpenses()) {
+  for (const e of listExpenses({ direction })) {
     if (!e.active) continue;
     const fecha = dateInMonth(e, month);
     if (fecha) rows.push({ ...e, fecha });
@@ -122,16 +128,16 @@ function monthExpenses(month) {
   return rows;
 }
 
-function monthExpensesTotal(month) {
-  return monthExpenses(month).reduce((a, e) => a + e.amount_cents, 0);
+function monthExpensesTotal(month, direction = 'out') {
+  return monthExpenses(month, direction).reduce((a, e) => a + e.amount_cents, 0);
 }
 
 /** Los siguientes gastos que van a llegar, ordenados por fecha. */
-function upcoming({ dias = 90, limit = 20 } = {}) {
+function upcoming({ dias = 90, limit = 20, direction = 'out' } = {}) {
   const hoy = todayISO();
   const limite = addDays(hoy, dias);
   const rows = [];
-  for (const e of listExpenses()) {
+  for (const e of listExpenses({ direction })) {
     if (!e.active) continue;
     const fecha = nextDate(e, hoy);
     if (fecha && fecha <= limite) rows.push({ ...e, fecha });
@@ -148,6 +154,7 @@ function addDays(iso, days) {
 
 module.exports = {
   KINDS,
+  DIRECTIONS,
   KIND_LABELS,
   addMonths,
   addDays,

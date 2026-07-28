@@ -7,7 +7,10 @@ const { layout } = require('./layout');
 const { stats, money, emptyState } = require('./common');
 const { PAYMENT_METHODS, metodoLegible } = require('./worker');
 
-function adminHome({ user, flash, warning, month, rows, totals, pendingTotalCents, gastos }) {
+function adminHome({ user, flash, warning, month, rows, totals, pendingTotalCents, gastos, ingresos }) {
+  // Lo que de verdad le queda a la empresa: lo suyo de lo facturado, más el
+  // dinero que ha entrado por otro lado, menos los gastos.
+  const quedaCents = totals.companyCents + ingresos.totalCents - gastos.totalCents;
   const body = `
 <h1>Resumen de ${esc(monthLabel(month))}</h1>
 ${monthForm('/admin', month)}
@@ -15,13 +18,9 @@ ${monthForm('/admin', month)}
 ${stats([
   { k: 'Facturado', v: money(totals.totalCents), sub: `${totals.count} servicio(s)` },
   { k: 'Comisiones', v: money(totals.commissionCents), sub: 'lo que se llevan ellas' },
+  { k: 'Otros ingresos', v: money(ingresos.totalCents), sub: `${ingresos.delMes.length} apunte(s)` },
   { k: 'Gastos', v: money(gastos.totalCents), sub: `${gastos.delMes.length} gasto(s) del mes` },
-  {
-    k: 'Queda para la empresa',
-    v: money(totals.companyCents - gastos.totalCents),
-    sub: 'facturado − comisiones − gastos',
-    accent: true,
-  },
+  { k: 'Queda para la empresa', v: money(quedaCents), sub: 'lo que hay en caja', accent: true },
 ])}
 
 <div class="card" style="margin-top:16px">
@@ -31,9 +30,14 @@ ${stats([
       <tbody>
         <tr><td>Facturado por todas</td><td class="num">${money(totals.totalCents)}</td></tr>
         <tr><td>− Comisiones de las trabajadoras</td><td class="num">−${money(totals.commissionCents)}</td></tr>
+        ${
+          ingresos.totalCents > 0
+            ? `<tr><td>+ Otros ingresos</td><td class="num">+${money(ingresos.totalCents)}</td></tr>`
+            : ''
+        }
         <tr><td>− Gastos de la empresa</td><td class="num">−${money(gastos.totalCents)}</td></tr>
         <tr><td><strong>Queda para la empresa</strong></td>
-            <td class="num"><strong>${money(totals.companyCents - gastos.totalCents)}</strong></td></tr>
+            <td class="num"><strong>${money(quedaCents)}</strong></td></tr>
       </tbody>
     </table>
   </div>
@@ -51,7 +55,10 @@ ${stats([
         )} el ${esc(formatDate(gastos.proximo.fecha))}.</p>`
       : ''
   }
-  <div class="actions" style="margin-top:6px"><a class="btn ghost" href="/admin/gastos">Gestionar los gastos</a></div>
+  <div class="actions" style="margin-top:6px">
+    <a class="btn ghost" href="/admin/gastos">Gestionar los gastos</a>
+    <a class="btn ghost" href="/admin/ingresos">Añadir dinero a caja</a>
+  </div>
 </div>
 
 <div class="card" style="margin-top:16px">
@@ -597,18 +604,61 @@ function adminEntryForm({ user, flash, warning, entry, workers, today }) {
 }
 
 
-function adminExpenses({ user, flash, warning, month, expenses, delMes, totalMesCents, proximos, editando }) {
+function adminExpenses({
+  user, flash, warning, month, expenses, delMes, totalMesCents, proximos, editando, direction = 'out', hoy,
+}) {
   const e = editando;
-  const hoy = new Date().toISOString().slice(0, 10);
+  const esIngreso = direction === 'in';
+
+  // Mismos bloques para gastos y para ingresos: sólo cambian las palabras.
+  const T = esIngreso
+    ? {
+        titulo: 'Otros ingresos',
+        intro:
+          'Dinero que entra por otro lado, aparte de lo que facturan las trabajadoras: ' +
+          'una venta suelta, una subvención, un alquiler... Se suma a la caja del mes.',
+        ruta: '/admin/ingresos',
+        pestana: 'ingresos',
+        unoNuevo: 'Añadir un ingreso',
+        editarUno: 'Editar ingreso',
+        botonNuevo: 'Añadir ingreso',
+        concepto: 'Venta de material, subvención, alquiler...',
+        delMes: `Ingresos de ${monthLabel(month)}`,
+        proximo: 'Próximo ingreso',
+        nada: 'No hay ningún ingreso a la vista.',
+        vacio: 'Todavía no has apuntado ningún ingreso.',
+        todos: 'Todos los ingresos',
+        cadaCuanto: '¿Cada cuánto entra?',
+        primero: 'Si se repite, pon la fecha del primero: las siguientes salen solas.',
+      }
+    : {
+        titulo: 'Gastos',
+        intro:
+          'Apunta aquí lo que paga la empresa. Los que se repiten se calculan solos: ' +
+          'no hay que volver a meterlos cada mes.',
+        ruta: '/admin/gastos',
+        pestana: 'gastos',
+        unoNuevo: 'Añadir un gasto',
+        editarUno: 'Editar gasto',
+        botonNuevo: 'Añadir gasto',
+        concepto: 'Alquiler, gasolina, seguro...',
+        delMes: `Gastos de ${monthLabel(month)}`,
+        proximo: 'Próximo gasto',
+        nada: 'No hay ningún gasto a la vista.',
+        vacio: 'Todavía no has apuntado ningún gasto.',
+        todos: 'Todos los gastos',
+        cadaCuanto: '¿Cada cuánto se paga?',
+        primero: 'Si se repite, pon la fecha del primer pago: las siguientes salen solas.',
+      };
 
   const body = `
-<h1>Gastos</h1>
-<p class="sub">Apunta aquí lo que paga la empresa. Los que se repiten se calculan solos: no hay que volver a meterlos cada mes.</p>
+<h1>${esc(T.titulo)}</h1>
+<p class="sub">${esc(T.intro)}</p>
 
 ${stats([
-  { k: `Gastos de ${monthLabel(month)}`, v: money(totalMesCents), sub: `${delMes.length} gasto(s)` },
+  { k: T.delMes, v: money(totalMesCents), sub: `${delMes.length} apunte(s)` },
   {
-    k: 'Próximo gasto',
+    k: T.proximo,
     v: proximos.length ? money(proximos[0].amount_cents) : '—',
     sub: proximos.length ? `${proximos[0].name} · ${formatDate(proximos[0].fecha)}` : 'nada a la vista',
     accent: true,
@@ -616,12 +666,12 @@ ${stats([
 ])}
 
 <div class="card" style="margin-top:16px">
-  <h2>${e ? 'Editar gasto' : 'Añadir un gasto'}</h2>
-  <form method="post" action="${e ? `/admin/gastos/${e.id}` : '/admin/gastos'}">
+  <h2>${esc(e ? T.editarUno : T.unoNuevo)}</h2>
+  <form method="post" action="${e ? `${T.ruta}/${e.id}` : T.ruta}">
     <div class="row">
       <div class="field" style="flex:2 1 240px">
         <label for="g_name">Concepto</label>
-        <input id="g_name" name="name" required placeholder="Alquiler, gasolina, seguro..." value="${esc(e ? e.name : '')}">
+        <input id="g_name" name="name" required placeholder="${esc(T.concepto)}" value="${esc(e ? e.name : '')}">
       </div>
       <div class="field">
         <label for="g_amount">Importe</label>
@@ -631,7 +681,7 @@ ${stats([
     </div>
     <div class="row">
       <div class="field">
-        <label for="g_kind">¿Cada cuánto se paga?</label>
+        <label for="g_kind">${esc(T.cadaCuanto)}</label>
         <select id="g_kind" name="kind">
           ${KINDS.map(
             (k) => `<option value="${k}" ${(e ? e.kind : 'monthly') === k ? 'selected' : ''}>${esc(KIND_LABELS[k])}</option>`
@@ -641,7 +691,7 @@ ${stats([
       <div class="field">
         <label for="g_date">${e && e.kind !== 'once' ? 'Fecha del primero' : 'Fecha'}</label>
         <input id="g_date" name="anchor_date" type="date" required value="${esc(e ? e.anchor_date : hoy)}">
-        <div class="hint">Si se repite, pon la fecha del primer pago: las siguientes salen solas.</div>
+        <div class="hint">${esc(T.primero)}</div>
       </div>
     </div>
     <div class="field">
@@ -659,18 +709,18 @@ ${stats([
         : ''
     }
     <div class="actions">
-      <button class="btn" type="submit">${e ? 'Guardar cambios' : 'Añadir gasto'}</button>
-      ${e ? '<a class="btn ghost" href="/admin/gastos">Cancelar</a>' : ''}
+      <button class="btn" type="submit">${esc(e ? 'Guardar cambios' : T.botonNuevo)}</button>
+      ${e ? `<a class="btn ghost" href="${T.ruta}">Cancelar</a>` : ''}
     </div>
   </form>
 </div>
 
 <div class="card">
   <h2>Lo que viene</h2>
-  <p class="sub">Próximos pagos de los tres meses que vienen.</p>
+  <p class="sub">Lo que llega en los tres meses que vienen.</p>
   ${
     proximos.length === 0
-      ? emptyState('No hay ningún gasto a la vista.')
+      ? emptyState(T.nada)
       : `<div class="table-wrap"><table>
     <thead><tr><th>Fecha</th><th>Concepto</th><th>Repetición</th><th class="num">Importe</th></tr></thead>
     <tbody>
@@ -690,10 +740,10 @@ ${stats([
 </div>
 
 <div class="card">
-  <h2>Todos los gastos</h2>
+  <h2>${esc(T.todos)}</h2>
   ${
     expenses.length === 0
-      ? emptyState('Todavía no has apuntado ningún gasto.')
+      ? emptyState(T.vacio)
       : `<div class="table-wrap"><table>
     <thead><tr><th>Concepto</th><th>Repetición</th><th>Próximo</th><th class="num">Importe</th><th></th></tr></thead>
     <tbody>
@@ -706,9 +756,9 @@ ${stats([
         <td class="small nowrap">${g.proximo ? esc(formatDate(g.proximo)) : '<span class="muted">—</span>'}</td>
         <td class="num">${money(g.amount_cents)}</td>
         <td class="right nowrap">
-          <a class="btn ghost small" href="/admin/gastos?editar=${g.id}">Editar</a>
-          <form method="post" action="/admin/gastos/${g.id}/borrar" class="inline">
-            <button class="btn ghost small" type="submit" data-confirm="¿Borrar el gasto &quot;${esc(g.name)}&quot;?">Borrar</button>
+          <a class="btn ghost small" href="${T.ruta}?editar=${g.id}">Editar</a>
+          <form method="post" action="${T.ruta}/${g.id}/borrar" class="inline">
+            <button class="btn ghost small" type="submit" data-confirm="¿Borrar &quot;${esc(g.name)}&quot;?">Borrar</button>
           </form>
         </td>
       </tr>`
@@ -719,7 +769,7 @@ ${stats([
   }
 </div>`;
 
-  return layout({ title: 'Gastos', user, body, active: 'gastos', flash, warning });
+  return layout({ title: T.titulo, user, body, active: T.pestana, flash, warning });
 }
 
 function monthForm(action, month) {

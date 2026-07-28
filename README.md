@@ -35,6 +35,9 @@ Pensada para usarse desde el móvil: apuntar un cobro son dos toques.
 - **Servicios**: todos los cobros, con filtros y descarga en CSV (se abre con Excel).
 - **Gastos**: lo que paga la empresa, sueltos o recurrentes. Los recurrentes se repiten
   solos y el Resumen los descuenta para decirte lo que queda de verdad a fin de mes.
+- **Ingresos**: dinero que entra por otro lado, aparte de lo que facturan las trabajadoras
+  (una venta suelta, una subvención, un alquiler...). También pueden repetirse solos y se
+  suman a la caja del mes.
 
 ## Las tres formas de pagar a una trabajadora
 
@@ -152,8 +155,10 @@ docker run -p 4400:4400 -v sasmoney-data:/data \
   Es lo que hace que la cifra que ya pagaste no cambie por detrás.
 - **La comisión nunca supera lo facturado.** Si una regla de cantidad fija diera más que la
   caja del periodo, se limita al total y se avisa en el desglose.
-- **Los gastos recurrentes no se guardan repetidos**: se guarda la primera fecha y las
-  siguientes se calculan, así que nunca se acaban ni hay que renovarlos.
+- **Los gastos e ingresos recurrentes no se guardan repetidos**: se guarda la primera fecha
+  y las siguientes se calculan, así que nunca se acaban ni hay que renovarlos.
+- **La caja del mes** es lo facturado, menos las comisiones, más los otros ingresos, menos
+  los gastos.
 - **Cada trabajadora sólo ve lo suyo.** El acceso a la parte del jefe está cerrado por rol.
 - **Las contraseñas no se pueden probar a lo bruto**: tras 8 fallos seguidos, esa
   combinación de usuario y origen queda bloqueada 15 minutos.
@@ -175,7 +180,7 @@ src/
   commission.js      el motor de cálculo (porcentaje, tramos, fijo)
   repo.js            consultas: servicios, totales, liquidaciones
   util.js            fechas, zona horaria, marca y escapado de HTML
-  expenses.js        gastos y cálculo de los que se repiten
+  expenses.js        gastos e ingresos, y cálculo de los que se repiten
   throttle.js        freno contra los intentos de entrada a lo bruto
   routes/            auth.js · worker.js · admin.js
   views/             HTML de cada pantalla

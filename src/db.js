@@ -137,6 +137,20 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 `);
 
+/**
+ * Cambios de esquema sobre bases de datos que ya existían.
+ * Se aplican solos al arrancar y no molestan si ya estaban puestos.
+ */
+function migrate() {
+  const cols = db.prepare('PRAGMA table_info(expenses)').all().map((c) => c.name);
+  if (!cols.includes('direction')) {
+    // 'out' = gasto, 'in' = dinero que entra por otro lado. Lo que ya había son gastos.
+    db.exec("ALTER TABLE expenses ADD COLUMN direction TEXT NOT NULL DEFAULT 'out'");
+  }
+}
+
+migrate();
+
 /** Crea el usuario administrador la primera vez que arranca la aplicación. */
 function ensureAdmin() {
   const existing = db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'").get();
