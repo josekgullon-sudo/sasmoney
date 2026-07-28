@@ -240,16 +240,35 @@ sudo systemctl start sasmoney
 
 ### Desinstalarla del todo
 
-Sin rastro y sin rozar nada más:
+Quita sólo lo suyo (servicio, temporizador, `/opt/sasmoney`, su usuario y su fichero
+de nginx si lo hubiera) y deja intacto el resto del servidor:
 
 ```bash
-sudo systemctl disable --now sasmoney.service sasmoney-copia.timer
-sudo rm /etc/systemd/system/sasmoney*.service /etc/systemd/system/sasmoney*.timer
-sudo systemctl daemon-reload
-sudo rm -rf /opt/sasmoney
-sudo userdel sasmoney
-# Los datos se quedan por si acaso; bórralos tú cuando estés seguro:
-# sudo rm -rf /var/lib/sasmoney
+sudo rm -rf /tmp/sasmoney
+git clone -b claude/saas-clientes-pagos-muh221 https://github.com/josekgullon-sudo/sasmoney.git /tmp/sasmoney
+sudo bash /tmp/sasmoney/deploy/desinstalar.sh
+```
+
+**Los datos se conservan** en `/var/lib/sasmoney`, por si te los quieres llevar a otro
+servidor. Para borrarlos también, añade `--con-datos`:
+
+```bash
+sudo bash /tmp/sasmoney/deploy/desinstalar.sh --con-datos
+```
+
+Si la instalaste en el servidor equivocado y ya habías apuntado cosas, llévate los datos
+antes de borrar nada. Desde tu ordenador:
+
+```bash
+# 1. Traer la base de datos del servidor equivocado
+scp root@SERVIDOR-VIEJO:/var/lib/sasmoney/sasmoney.db .
+
+# 2. Instalarla en el servidor bueno y pararla un momento
+ssh root@SERVIDOR-BUENO 'systemctl stop sasmoney'
+
+# 3. Subir la base de datos y dejarla en su sitio
+scp sasmoney.db root@SERVIDOR-BUENO:/var/lib/sasmoney/sasmoney.db
+ssh root@SERVIDOR-BUENO 'chown sasmoney:sasmoney /var/lib/sasmoney/sasmoney.db && systemctl start sasmoney'
 ```
 
 ---
