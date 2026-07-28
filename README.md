@@ -84,6 +84,8 @@ Puedes crear un fichero `.env` (mira `.env.example`) o poner las variables en tu
 | `COOKIE_SECURE` | Pon `1` cuando la sirvas por HTTPS | apagado |
 | `SESSION_DAYS` | Días que dura la sesión sin volver a entrar | `30` |
 | `HOST` | Interfaz donde escucha (`127.0.0.1` si hay un proxy delante) | `0.0.0.0` |
+| `LOGIN_MAX_FALLOS` | Intentos de entrada fallidos antes de bloquear | `8` |
+| `LOGIN_BLOQUEO_MIN` | Minutos que dura el bloqueo | `15` |
 
 ### Subirla a un servidor
 
@@ -147,6 +149,8 @@ docker run -p 4400:4400 -v sasmoney-data:/data \
 - **La comisión nunca supera lo facturado.** Si una regla de cantidad fija diera más que la
   caja del periodo, se limita al total y se avisa en el desglose.
 - **Cada trabajadora sólo ve lo suyo.** El acceso a la parte del jefe está cerrado por rol.
+- **Las contraseñas no se pueden probar a lo bruto**: tras 8 fallos seguidos, esa
+  combinación de usuario y origen queda bloqueada 15 minutos.
 - Al cambiarle la contraseña a alguien, sus sesiones abiertas se cierran solas.
 
 ## Desarrollo
@@ -165,6 +169,7 @@ src/
   commission.js      el motor de cálculo (porcentaje, tramos, fijo)
   repo.js            consultas: servicios, totales, liquidaciones
   util.js            fechas, zona horaria y escapado de HTML
+  throttle.js        freno contra los intentos de entrada a lo bruto
   routes/            auth.js · worker.js · admin.js
   views/             HTML de cada pantalla
 public/              estilos y un poco de JavaScript de interfaz

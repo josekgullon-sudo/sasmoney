@@ -113,6 +113,7 @@ const HOST = process.env.HOST || '0.0.0.0';
 
 if (require.main === module) {
   pruneSessions();
+  require('./throttle').limpiar();
   const seeded = ensureAdmin();
   if (seeded) {
     setSetting('admin_password_changed', process.env.ADMIN_PASSWORD ? '1' : '0');

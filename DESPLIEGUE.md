@@ -63,7 +63,48 @@ propósito: no queda expuesta a internet hasta que tú lo decidas en el paso 2.
 > Para comprobar desde el propio servidor que está funcionando:
 > `curl -I http://127.0.0.1:4400/login` debe responder `HTTP/1.1 200 OK`.
 
-## Paso 2: abrirla a internet con HTTPS
+## Paso 2 (rápido): entrar por IP, sin dominio
+
+Igual que se entra a Emby: `http://LA-IP-DE-TU-SERVIDOR:4400`. Es lo más rápido
+para empezar hoy mismo, pero **sin candado**: las contraseñas y los importes viajan
+a la vista de cualquiera que comparta el wifi con tus trabajadoras. Vale para probar
+y para ir apuntando desde el local; para el uso diario por la calle, pásate al
+apartado siguiente en cuanto puedas.
+
+Hay que cambiar dos cosas en `/opt/sasmoney/sasmoney.env`:
+
+```bash
+sudo sed -i 's/^HOST=.*/HOST=0.0.0.0/' /opt/sasmoney/sasmoney.env
+sudo sed -i 's/^COOKIE_SECURE=.*/COOKIE_SECURE=0/' /opt/sasmoney/sasmoney.env
+sudo systemctl restart sasmoney
+```
+
+- `HOST=0.0.0.0` la saca del "sólo dentro del servidor" a toda la red.
+- `COOKIE_SECURE=0` es **imprescindible**: con el valor 1 el navegador sólo guarda la
+  sesión si hay HTTPS, así que por `http://` no podrías ni entrar.
+
+Si el servidor tiene cortafuegos, abre el puerto (esto no afecta a Emby):
+
+```bash
+sudo ufw status                 # ¿está activo?
+sudo ufw allow 4400/tcp         # sólo si lo está
+```
+
+Y comprueba también el panel de tu proveedor (Hetzner, OVH, Contabo…), que suele
+traer su propio cortafuegos aparte.
+
+> Cuando montes el HTTPS del apartado siguiente, deja otra vez `HOST=127.0.0.1` y
+> `COOKIE_SECURE=1`, y cierra el 4400 con `sudo ufw delete allow 4400/tcp`.
+
+### ¿HTTPS sin comprar dominio?
+
+Se puede, y es casi el mismo trabajo: servicios como `nip.io` convierten tu IP en un
+nombre gratis. Si tu IP es 187.124.208.99, el nombre `sasmoney.187.124.208.99.nip.io`
+ya apunta a ella sin que tengas que registrar ni configurar nada, y Let's Encrypt
+emite certificado para él. Sigue el apartado siguiente usando ese nombre en lugar de
+un dominio propio.
+
+## Paso 3: abrirla a internet con HTTPS
 
 Tus trabajadoras necesitan entrar desde el móvil por la calle, así que hace falta
 un dominio y un candado (HTTPS). **No abras el puerto 4400 en el router**: sin

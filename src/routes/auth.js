@@ -12,6 +12,7 @@ const {
   requireLogin,
 } = require('../auth');
 const { loginPage, accountPage } = require('../views/common');
+const throttle = require('../throttle');
 
 const router = express.Router();
 
@@ -29,13 +30,29 @@ router.post('/login', (req, res) => {
   const password = String(req.body.password || '');
   const next = String(req.body.next || '');
 
-  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
-  if (!user || !user.active || !checkPassword(password, user.password_hash)) {
-    return res.status(401).send(
-      loginPage({ error: 'Usuario o contraseña incorrectos.', next })
+  // Freno contra quien se dedique a probar contraseñas a lo bruto.
+  const espera = throttle.comprobar(username, req.ip);
+  if (!espera.permitido) {
+    return res.status(429).send(
+      loginPage({
+        error: `Demasiados intentos fallidos. Prueba otra vez dentro de ${espera.minutos} minuto(s).`,
+        next,
+      })
     );
   }
 
+  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+  if (!user || !user.active || !checkPassword(password, user.password_hash)) {
+    const r = throttle.fallo(username, req.ip);
+    const aviso = r.bloqueado
+      ? `Demasiados intentos fallidos. Prueba otra vez dentro de ${r.minutos} minutos.`
+      : r.restantes <= 3
+        ? `Usuario o contraseña incorrectos. Te quedan ${r.restantes} intento(s).`
+        : 'Usuario o contraseña incorrectos.';
+    return res.status(401).send(loginPage({ error: aviso, next }));
+  }
+
+  throttle.acierto(username, req.ip);
   setSessionCookie(res, createSession(user.id));
   const safeNext = next.startsWith('/') && !next.startsWith('//') ? next : null;
   res.redirect(safeNext || (user.role === 'admin' ? '/admin' : '/'));
