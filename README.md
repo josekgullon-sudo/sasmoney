@@ -92,9 +92,14 @@ en un servidor Linux con HTTPS, arranque automático y copias de seguridad, sin 
 de lo que ya haya instalado en esa máquina. Resumen:
 
 ```bash
+sudo rm -rf /tmp/sasmoney
 git clone -b claude/saas-clientes-pagos-muh221 https://github.com/josekgullon-sudo/sasmoney.git /tmp/sasmoney
 sudo bash /tmp/sasmoney/deploy/instalar.sh
 ```
+
+El mismo comando instala y actualiza. Lánzalo siempre desde una copia recién
+descargada en `/tmp`, no desde `/opt/sasmoney/app`: así el instalador nunca depende
+de la versión que ya hubiera instalada.
 
 A mano, en cualquier otro sitio (Railway, Render, Fly.io…):
 

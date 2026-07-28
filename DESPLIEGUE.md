@@ -161,12 +161,18 @@ sudo journalctl -u sasmoney -f      # ver qué está pasando (Ctrl+C para salir)
 
 ### Actualizarla
 
+Siempre con una copia recién descargada, **nunca** con la que hay en
+`/opt/sasmoney/app`: si el instalador que tienes instalado tuviera un fallo,
+no podría arreglarse a sí mismo.
+
 ```bash
-sudo bash /opt/sasmoney/app/deploy/instalar.sh
+sudo rm -rf /tmp/sasmoney
+git clone -b claude/saas-clientes-pagos-muh221 https://github.com/josekgullon-sudo/sasmoney.git /tmp/sasmoney
+sudo bash /tmp/sasmoney/deploy/instalar.sh
 ```
 
-El mismo script sirve para actualizar: se trae la última versión, **respeta tu
-configuración y tus datos** y reinicia el servicio.
+El mismo script sirve para instalar y para actualizar: se trae la última versión,
+**mantiene tu puerto, tu configuración y tus datos** y reinicia el servicio.
 
 ### Copias de seguridad
 
