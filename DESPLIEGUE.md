@@ -45,6 +45,24 @@ A partir de ahí la aplicación:
 De momento sólo responde dentro del propio servidor (`127.0.0.1:4400`). Eso es a
 propósito: no queda expuesta a internet hasta que tú lo decidas en el paso 2.
 
+> **Ojo con `127.0.0.1`:** esa dirección significa *"este mismo ordenador"*. Si la
+> escribes en el navegador de tu portátil, el navegador la busca **en tu portátil**, no
+> en el servidor, y sale `ERR_CONNECTION_REFUSED`. Es normal y no significa que la
+> instalación haya fallado.
+>
+> Para verla desde tu ordenador **antes** de montar el dominio, abre un túnel por SSH:
+>
+> ```bash
+> ssh -L 4400:127.0.0.1:4400 usuario@ip-de-tu-servidor
+> ```
+>
+> Deja esa ventana abierta y entonces sí, abre <http://127.0.0.1:4400> en tu navegador:
+> ahora el 4400 de tu ordenador sale por el túnel hasta el del servidor. Al cerrar la
+> ventana de SSH se acaba el túnel.
+>
+> Para comprobar desde el propio servidor que está funcionando:
+> `curl -I http://127.0.0.1:4400/login` debe responder `HTTP/1.1 200 OK`.
+
 ## Paso 2: abrirla a internet con HTTPS
 
 Tus trabajadoras necesitan entrar desde el móvil por la calle, así que hace falta
