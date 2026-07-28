@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Copia de seguridad de la base de datos de SasMoney.
+# Copia de seguridad de la base de datos de SaaS TotalFlix.
 #
 # Para la aplicación un segundo, copia el fichero y la vuelve a arrancar: así la
 # copia queda íntegra (copiada en caliente podría salir a medias). Guarda las 30

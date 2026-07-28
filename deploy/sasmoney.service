@@ -1,5 +1,5 @@
 [Unit]
-Description=SasMoney - control de cobros y liquidaciones
+Description=SaaS TotalFlix - control de cobros, gastos y liquidaciones
 Documentation=https://github.com/josekgullon-sudo/sasmoney
 After=network-online.target
 Wants=network-online.target

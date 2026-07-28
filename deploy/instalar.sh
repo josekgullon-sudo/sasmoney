@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Instala SasMoney en un servidor Linux con systemd.
+# Instala SaaS TotalFlix en un servidor Linux con systemd.
 #
 # Lo hace todo dentro de sus propias carpetas y con su propio usuario:
 #   /opt/sasmoney       la aplicación y, si hace falta, su propio Node
@@ -207,8 +207,12 @@ install -m 644 "$APP_DIR/deploy/sasmoney-copia.timer" /etc/systemd/system/sasmon
 install -m 755 "$APP_DIR/deploy/copia-seguridad.sh" "$BASE/copia-seguridad.sh"
 
 systemctl daemon-reload
-systemctl enable --quiet --now sasmoney.service
+systemctl enable --quiet sasmoney.service
 systemctl enable --quiet --now sasmoney-copia.timer
+
+# Reiniciar, no sólo arrancar: "enable --now" no hace nada si ya estaba en
+# marcha, y entonces el proceso viejo seguiría con el código anterior.
+systemctl restart sasmoney.service
 sleep 2
 
 if ! systemctl is-active --quiet sasmoney.service; then
@@ -216,14 +220,19 @@ if ! systemctl is-active --quiet sasmoney.service; then
   journalctl -u sasmoney -n 20 --no-pager
   die "El servicio no ha arrancado. Arriba tienes el motivo."
 fi
-ok "Servicio activo y configurado para arrancar con el servidor"
+ok "Servicio reiniciado con la nueva versión y listo para arrancar solo"
 ok "Copia de seguridad automática todas las noches"
+
+VERSION=$(gitapp log -1 --format='%h del %cd' --date=short 2>/dev/null || echo 'desconocida')
+ARRANCADO=$(systemctl show -p ActiveEnterTimestamp --value sasmoney.service 2>/dev/null || true)
 
 # -------------------------------------------------------------- 7. Resumen
 echo
 printf '\033[1;32m────────────────────────────────────────────────\033[0m\n'
-printf '  SasMoney funcionando\n'
+printf '  SaaS TotalFlix funcionando\n'
 printf '\033[1;32m────────────────────────────────────────────────\033[0m\n'
+printf '  Versión:     %s\n' "$VERSION"
+printf '  Arrancada:   %s\n\n' "${ARRANCADO:-ahora}"
 if [ "$NUEVA_INSTALACION" = "1" ]; then
   printf '  Usuario:     admin\n'
   printf '  Contraseña:  %s\n' "$(sed -n 's/^ADMIN_PASSWORD=//p' "$ENV_FILE" | head -1)"

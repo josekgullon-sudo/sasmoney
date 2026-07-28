@@ -1,5 +1,5 @@
 [Unit]
-Description=Copia de seguridad de SasMoney cada noche
+Description=Copia de seguridad de SaaS TotalFlix cada noche
 
 [Timer]
 # Todos los días a las 4:30 de la madrugada. Si el servidor estaba apagado,

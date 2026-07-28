@@ -263,6 +263,17 @@ sudo userdel sasmoney
 | `502 Bad Gateway` | La aplicación está parada: `sudo systemctl restart sasmoney` |
 | Sale sin candado o da error de certificado | El certificado no se emitió: repite `sudo certbot --nginx -d tu.dominio` |
 | El instalador dice que el puerto está ocupado | Ya cogió otro automáticamente; míralo en `/opt/sasmoney/sasmoney.env` y ajústalo en el proxy |
+| **He actualizado y la web se ve igual** | Reinicia con `sudo systemctl restart sasmoney` y recarga el navegador con Ctrl+F5 (Cmd+Shift+R en Mac) |
+
+Para saber qué versión está corriendo de verdad:
+
+```bash
+sudo git -C /opt/sasmoney/app log -1 --format='%h %cd %s' --date=short
+systemctl show -p ActiveEnterTimestamp --value sasmoney
+```
+
+La segunda línea dice desde cuándo está en marcha el proceso: si es anterior a tu
+última actualización, es que no se reinició.
 
 Para saber si el problema es de la aplicación o del proxy, prueba desde el propio
 servidor:
