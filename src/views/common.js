@@ -1,6 +1,7 @@
 'use strict';
 
 const { esc, BRAND } = require('../util');
+const { asset } = require('../assets');
 const { formatEuro } = require('../commission');
 const { layout } = require('./layout');
 
@@ -12,7 +13,7 @@ function loginPage({ error = '', next = '', hint = '' }) {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f766e">
 <title>Entrar · ${esc(BRAND)}</title>
-<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="${asset('styles.css')}">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💶</text></svg>">
 </head>
 <body>
@@ -37,7 +38,7 @@ function loginPage({ error = '', next = '', hint = '' }) {
   </div>
   <p class="sub right"><small>Si no puedes entrar, pide al jefe que te dé de alta.</small></p>
 </div>
-<script src="/app.js" defer></script>
+<script src="${asset('app.js')}" defer></script>
 </body>
 </html>`;
 }

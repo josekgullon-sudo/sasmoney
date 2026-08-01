@@ -1,6 +1,7 @@
 'use strict';
 
 const { esc, BRAND } = require('../util');
+const { asset } = require('../assets');
 
 /**
  * Envoltorio HTML común a todas las páginas.
@@ -21,7 +22,7 @@ function layout({ title, user, body, active = '', flash = [], warning = '' }) {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f766e">
 <title>${esc(title)} · ${esc(BRAND)}</title>
-<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="${asset('styles.css')}">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💶</text></svg>">
 </head>
 <body>
@@ -31,7 +32,7 @@ ${user ? nav(user, active) : ''}
   ${flash.map((f) => `<div class="banner ${esc(f.type)}">${esc(f.text)}</div>`).join('')}
   ${body}
 </main>
-<script src="/app.js" defer></script>
+<script src="${asset('app.js')}" defer></script>
 </body>
 </html>`;
 }
