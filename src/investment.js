@@ -72,4 +72,35 @@ function sharesFromBilling(rows) {
   });
 }
 
-module.exports = { setShares, split, sharesFromBilling };
+/**
+ * Reparte a partes iguales entre los trabajadores que cuenten.
+ *
+ * Es lo que se hace con los gastos que no son publicidad (alquiler, gestoría...):
+ * no dependen de quién trabaje, así que cada uno carga la misma parte. Si entra
+ * alguien nuevo, el reparto se ajusta solo: con dos son la mitad cada uno, con
+ * tres un tercio. Al último le toca lo que sobra del redondeo, para que la suma
+ * cuadre al céntimo.
+ *
+ * @param {number} cents        Total a repartir.
+ * @param {Array}  rows         Filas de trabajadores.
+ * @param {Function} cuenta     Cuáles entran en el reparto (por defecto, los activos).
+ * @returns {Map} id de trabajador -> céntimos que le tocan.
+ */
+function splitEqually(cents, rows, cuenta = (r) => Boolean(r.user.active)) {
+  const reparto = new Map(rows.map((r) => [r.user.id, 0]));
+  const participan = rows.filter(cuenta);
+  if (participan.length === 0 || cents <= 0) return reparto;
+
+  const cada = Math.round(cents / participan.length);
+  let repartido = 0;
+
+  participan.forEach((r, i) => {
+    const suya = i === participan.length - 1 ? cents - repartido : cada;
+    repartido += suya;
+    reparto.set(r.user.id, suya);
+  });
+
+  return reparto;
+}
+
+module.exports = { setShares, split, sharesFromBilling, splitEqually };

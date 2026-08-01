@@ -8,7 +8,7 @@ const { PAYMENT_METHODS, metodoLegible } = require('./worker');
 
 function adminHome({
   user, flash, warning, month, rows, totals, pendingTotalCents,
-  gastos, ingresos, inversionCents, inversionSinAsignarCents, otrosGastosCents,
+  gastos, ingresos, inversionCents, inversionSinAsignarCents, otrosGastosCents, trabajadoresActivos,
 }) {
   const quedaCents = totals.totalCents - totals.commissionCents + ingresos.totalCents - gastos.totalCents;
   const pct = (parte, todo) => (todo > 0 ? (parte / todo) * 100 : 0);
@@ -27,7 +27,7 @@ ${stats([
 
 <div class="card" style="margin-top:16px">
   <h2>Cada trabajador</h2>
-  <p class="sub">Lo que factura, lo que se lleva, su parte de la inversión y lo que deja.</p>
+  <p class="sub">Lo que factura, lo que se lleva, los gastos que carga y lo que deja.</p>
   ${
     rows.length === 0
       ? emptyState('Nadie ha apuntado nada este mes.')
@@ -45,9 +45,10 @@ ${stats([
       </div>
       <div class="lines">
         <div><span class="muted">Se lleva</span><span>${money(r.calc.commissionCents)}</span></div>
-        <div><span class="muted">Su inversión (${esc(fmtPct(r.sharePercent))})</span><span>${money(
+        <div><span class="muted">Publicidad (${esc(fmtPct(r.sharePercent))})</span><span>${money(
               r.inversionCents
             )}</span></div>
+        <div><span class="muted">Resto de gastos</span><span>${money(r.gastosGeneralesCents)}</span></div>
         <div class="deja"><span>Deja</span><span style="color:${
           r.beneficioCents < 0 ? 'var(--danger)' : 'inherit'
         }">${money(r.beneficioCents)} · ${esc(fmtPct(pct(r.beneficioCents, r.totalCents)))}</span></div>
@@ -70,7 +71,7 @@ ${stats([
       <th>Trabajador</th>
       <th class="num">Factura</th>
       <th class="num hide-narrow">Se lleva</th>
-      <th class="num hide-narrow">Su inversión</th>
+      <th class="num hide-narrow">Sus gastos</th>
       <th class="num">Deja</th>
       <th class="num hide-narrow">Margen</th>
       <th class="num">A liquidar</th>
@@ -84,9 +85,9 @@ ${stats([
           )}</a><div class="small muted hide-narrow">${esc(ruleLabel(r.user))}</div></td>
         <td class="num">${money(r.totalCents)}<div class="small muted">${r.count} serv.</div></td>
         <td class="num hide-narrow">${money(r.calc.commissionCents)}</td>
-        <td class="num hide-narrow">${money(r.inversionCents)}<div class="small muted">${esc(
-            fmtPct(r.sharePercent)
-          )}</div></td>
+        <td class="num hide-narrow">${money(r.gastosTotalesCents)}
+          <div class="small muted">${money(r.inversionCents)} publi</div>
+          <div class="small muted">${money(r.gastosGeneralesCents)} resto</div></td>
         <td class="num"><strong style="color:${
           r.beneficioCents < 0 ? 'var(--danger)' : 'inherit'
         }">${money(r.beneficioCents)}</strong></td>
@@ -107,10 +108,10 @@ ${stats([
       <td>Total</td>
       <td class="num">${money(totals.totalCents)}</td>
       <td class="num hide-narrow">${money(totals.commissionCents)}</td>
-      <td class="num hide-narrow">${money(inversionCents - inversionSinAsignarCents)}</td>
-      <td class="num">${money(
-        totals.totalCents - totals.commissionCents - (inversionCents - inversionSinAsignarCents)
+      <td class="num hide-narrow">${money(
+        rows.reduce((a, r) => a + r.gastosTotalesCents, 0)
       )}</td>
+      <td class="num">${money(rows.reduce((a, r) => a + r.beneficioCents, 0))}</td>
       <td class="num hide-narrow"></td>
       <td class="num">${money(pendingTotalCents)}</td>
     </tr></tfoot>
@@ -118,13 +119,17 @@ ${stats([
   }
   <details class="box">
     <summary>Qué significa cada columna</summary>
-    <p class="small"><strong>Deja</strong>: lo que factura menos su comisión y menos su parte de la inversión.
-       Es lo que aporta de verdad a la empresa.</p>
+    <p class="small"><strong>Deja</strong>: lo que factura menos su comisión y menos los gastos que
+       carga. Es lo que aporta de verdad a la empresa.</p>
     <p class="small"><strong>A liquidar</strong>: lo que le debes ahora mismo, de lo que aún no le has pagado.</p>
-    <p class="small"><strong>Su inversión</strong>: el porcentaje de la publicidad que le has
-       asignado. Se cambia en <a href="/admin/caja">Caja</a>.${
+    <p class="small"><strong>Sus gastos</strong>: la publicidad que le has asignado, más su parte
+       del resto de gastos. El resto de gastos (${money(
+         otrosGastosCents
+       )}) se divide <strong>a partes iguales</strong> entre los ${trabajadoresActivos} trabajadores en
+       activo, así que si entra alguien nuevo el reparto se ajusta solo. Los porcentajes de la
+       publicidad se cambian en <a href="/admin/caja">Caja</a>.${
          inversionSinAsignarCents > 0
-           ? ` Ahora mismo quedan ${money(inversionSinAsignarCents)} sin asignar a nadie.`
+           ? ` De la publicidad quedan ${money(inversionSinAsignarCents)} sin asignar a nadie.`
            : ''
        }</p>
   </details>

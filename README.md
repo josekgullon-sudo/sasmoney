@@ -33,7 +33,9 @@ Cinco pantallas, cada una con una pregunta clara:
   pagues, pulsas *Liquidado* y su cuenta de ese periodo vuelve a cero: esos servicios quedan
   cerrados y ya no se cuentan otra vez ni se pueden modificar.
 - **Caja** — *¿qué entra y qué sale por fuera de los servicios?* Gastos e ingresos, sueltos o
-  recurrentes (**diarios**, mensuales, trimestrales o anuales), y el reparto de la inversión.
+  recurrentes (**diarios**, mensuales, trimestrales o anuales), y el reparto de la inversión:
+  la publicidad con el porcentaje que pongas a cada uno, y el resto de gastos a partes
+  iguales.
 - **Servicios** — todos los cobros, con filtros y descarga en CSV.
 - **Trabajadores** — altas, contraseñas y cuánto se lleva cada una.
 
@@ -166,7 +168,10 @@ docker run -p 4400:4400 -v sasmoney-data:/data \
   escribes es el que se usa: si suman 90, el 10 % restante **queda sin asignar** y lo paga la
   empresa, sin cargarlo a nadie. Hay un botón que rellena los porcentajes con lo que ha
   facturado cada uno, por si quieres partir de ahí, pero es sólo un atajo.
-- Los demás gastos no se reparten, porque no dependen de quién trabaje.
+- **El resto de gastos** (alquiler, gestoría, gasolina…) se divide **a partes iguales** entre
+  los trabajadores en activo, sin nada que configurar: con dos son la mitad cada uno, y si
+  entra un tercero pasan a un tercio automáticamente. Quien está de baja en la aplicación no
+  carga con nada.
 - **Cada trabajadora sólo ve lo suyo.** El acceso a la parte del jefe está cerrado por rol.
 - **Las contraseñas no se pueden probar a lo bruto**: tras 8 fallos seguidos, esa
   combinación de usuario y origen queda bloqueada 15 minutos.

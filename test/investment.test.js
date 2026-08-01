@@ -79,3 +79,41 @@ test('sin facturación el atajo deja todo a cero', () => {
   const shares = sharesFromBilling([fila('A', 0, 0), fila('B', 0, 0)]);
   assert.deepEqual(shares, [{ id: 'A', share: 0 }, { id: 'B', share: 0 }]);
 });
+
+const { splitEqually } = require('../src/investment');
+
+const activo = (nombre, activa = 1) => ({
+  user: { id: nombre, name: nombre, active: activa, investment_share: 0 },
+  totalCents: 0,
+  calc: { commissionCents: 0 },
+});
+
+test('los gastos generales se parten a la mitad entre dos', () => {
+  const r = splitEqually(50000, [activo('Ana'), activo('Lucia')]);
+  assert.equal(r.get('Ana'), 25000);
+  assert.equal(r.get('Lucia'), 25000);
+});
+
+test('si entra un tercero, el reparto se ajusta solo', () => {
+  const r = splitEqually(50000, [activo('Ana'), activo('Lucia'), activo('Marta')]);
+  assert.equal(r.get('Ana') + r.get('Lucia') + r.get('Marta'), 50000);
+  assert.equal(r.get('Ana'), 16667);
+  assert.equal(r.get('Marta'), 16666); // al último le toca el resto
+});
+
+test('un trabajador dado de baja no carga con gastos', () => {
+  const r = splitEqually(50000, [activo('Ana'), activo('Antigua', 0)]);
+  assert.equal(r.get('Ana'), 50000);
+  assert.equal(r.get('Antigua'), 0);
+});
+
+test('sin gastos generales no se reparte nada', () => {
+  const r = splitEqually(0, [activo('Ana'), activo('Lucia')]);
+  assert.equal(r.get('Ana'), 0);
+  assert.equal(r.get('Lucia'), 0);
+});
+
+test('sin nadie activo no se reparte y no se pierde el control', () => {
+  const r = splitEqually(50000, [activo('Antigua', 0)]);
+  assert.equal(r.get('Antigua'), 0);
+});

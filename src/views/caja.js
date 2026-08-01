@@ -14,7 +14,7 @@ function adminCaja({
   user, flash, warning, month, hoy,
   gastos, ingresos, totales,
   editando, diasAjustados,
-  workers, reparto,
+  workers, reparto, otrosGastos,
 }) {
   const e = editando;
   const esIngreso = e ? e.direction === 'in' : false;
@@ -47,7 +47,7 @@ ${e ? formularioEdicion(e, esIngreso, diasAjustados, month, hoy) : ''}
   ${listaMovimientos(ingresos.todos, 'in')}
 </div>
 
-${tarjetaReparto(workers, totales.inversionCents, reparto, month)}
+${tarjetaReparto(workers, totales.inversionCents, reparto, month, otrosGastos)}
 
 <div class="card">
   <h2>Lo que viene</h2>
@@ -281,7 +281,7 @@ function listaMovimientos(filas, direction) {
 }
 
 /** Quién carga con qué parte de la publicidad. Los porcentajes los pone el jefe. */
-function tarjetaReparto(workers, inversionCents, reparto, month) {
+function tarjetaReparto(workers, inversionCents, reparto, month, otrosGastos) {
   const suma = reparto.sumaPercent;
   const fmt = (n) => String(Number(n) % 1 === 0 ? n : n.toFixed(1)).replace('.', ',');
 
@@ -361,6 +361,24 @@ function tarjetaReparto(workers, inversionCents, reparto, month) {
     <p class="hint">El segundo botón sólo rellena los huecos con lo que ha facturado cada uno
        este mes, por si quieres partir de ahí. Luego los cambias a mano.</p>
   </form>`
+  }
+
+  <hr class="divider">
+  <h2>El resto de gastos</h2>
+  <p class="sub">Alquiler, gestoría, gasolina… todo lo que no es inversión se divide
+     <strong>a partes iguales</strong> entre los trabajadores en activo. No hay nada que
+     configurar: si entra alguien nuevo, el reparto se ajusta solo.</p>
+  ${
+    otrosGastos.activos === 0
+      ? emptyState('No hay trabajadores en activo.')
+      : `<div class="table-wrap"><table>
+    <tbody>
+      <tr><td>Resto de gastos de ${esc(monthLabel(month))}</td>
+          <td class="num">${money(otrosGastos.totalCents)}</td></tr>
+      <tr><td>Entre ${otrosGastos.activos} trabajador(es) en activo</td>
+          <td class="num"><strong>${money(otrosGastos.cadaUnoCents)} cada uno</strong></td></tr>
+    </tbody>
+  </table></div>`
   }
 </div>`;
 }

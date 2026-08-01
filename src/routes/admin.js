@@ -28,7 +28,12 @@ router.get('/', (req, res) => {
   const month = validMonth(req.query.month);
   const { from, to } = monthRange(month);
 
-  const base = repo.settlementRows({ from, to, pendingOnly: false }).map((r) => {
+  // Se incluyen todos los trabajadores en activo, hayan facturado o no: los
+  // gastos generales se reparten entre todos y la cuenta tiene que cuadrar.
+  const base = repo
+    .settlementRows({ from, to, pendingOnly: false, includeEmpty: true })
+    .filter((r) => r.user.active || r.count > 0)
+    .map((r) => {
     const pending = repo.totalsFor({ userId: r.user.id, from, to, pendingOnly: true });
     const pendingCalc = calcCommission(r.user, {
       totalCents: pending.totalCents,
@@ -51,8 +56,21 @@ router.get('/', (req, res) => {
   const inversionCents = gastosMes.filter((g) => g.is_investment).reduce((a, g) => a + g.total_cents, 0);
   const otrosGastosCents = gastosMes.filter((g) => !g.is_investment).reduce((a, g) => a + g.total_cents, 0);
 
-  const reparto = investment.split(inversionCents, base.sort((a, b) => b.totalCents - a.totalCents));
-  const rows = reparto.rows;
+  const ordenadas = base.sort((a, b) => b.totalCents - a.totalCents);
+  const reparto = investment.split(inversionCents, ordenadas);
+
+  // El resto de gastos (alquiler, gestoría...) va a partes iguales.
+  const porIgual = investment.splitEqually(otrosGastosCents, ordenadas);
+
+  const rows = reparto.rows.map((r) => {
+    const generales = porIgual.get(r.user.id) || 0;
+    return {
+      ...r,
+      gastosGeneralesCents: generales,
+      gastosTotalesCents: r.inversionCents + generales,
+      beneficioCents: r.beneficioCents - generales,
+    };
+  });
 
   const proximos = expenses.upcoming({ dias: 92, direction: 'out' });
 
@@ -68,6 +86,7 @@ router.get('/', (req, res) => {
       inversionCents,
       inversionSinAsignarCents: reparto.sinAsignarCents,
       otrosGastosCents,
+      trabajadoresActivos: ordenadas.filter((r) => r.user.active).length,
       gastos: {
         totalCents: gastosMes.reduce((a, g) => a + g.total_cents, 0),
         pendientesCents: gastosMes.reduce((a, g) => a + g.pendiente_cents, 0),
@@ -514,6 +533,7 @@ router.get('/caja', (req, res) => {
   const inversionCents = gastos.delMes
     .filter((g) => g.is_investment)
     .reduce((a, g) => a + g.total_cents, 0);
+  const otrosGastosCents = gastos.totalCents - inversionCents;
 
   const { from, to } = monthRange(month);
   const servicios = repo.settlementRows({ from, to, pendingOnly: false });
@@ -548,6 +568,14 @@ router.get('/caja', (req, res) => {
       diasAjustados: editando ? expenses.listDayAmounts(editando.id, month) : [],
       workers,
       reparto: investment.split(inversionCents, filasReparto),
+      otrosGastos: {
+        totalCents: otrosGastosCents,
+        activos: workers.filter((w) => w.active).length,
+        cadaUnoCents:
+          workers.filter((w) => w.active).length > 0
+            ? Math.round(otrosGastosCents / workers.filter((w) => w.active).length)
+            : 0,
+      },
     })
   );
 });
