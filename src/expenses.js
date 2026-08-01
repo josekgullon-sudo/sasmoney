@@ -74,36 +74,72 @@ function nextDate(expense, desde = todayISO()) {
 /** Fecha en la que ese gasto cae dentro del mes indicado ('YYYY-MM'), o null. */
 function dateInMonth(expense, month) {
   const fechas = monthOccurrences(expense, month);
-  return fechas.length ? fechas[0] : null;
+  return fechas.length ? fechas[0].fecha : null;
 }
 
 /**
- * Todos los días de ese mes en los que toca pagar ese gasto.
+ * Los días de ese mes en los que toca pagar ese gasto, cada uno con su importe.
  * Casi siempre es uno solo; los diarios caen tantas veces como días tenga el mes
- * (contando desde su fecha de inicio si empezó a mitad).
+ * (contando desde su fecha de inicio si empezó a mitad). Si algún día tiene un
+ * importe ajustado a mano, se usa ese en lugar del habitual.
  */
 function monthOccurrences(expense, month) {
   const { from, to } = monthRange(month);
   const anchor = expense.anchor_date;
+  const ajustes = dayOverrides(expense.id, month);
+  const conImporte = (fecha) => ({
+    fecha,
+    amount_cents: ajustes.has(fecha) ? ajustes.get(fecha) : expense.amount_cents,
+    ajustado: ajustes.has(fecha),
+  });
 
   if (expense.kind === 'daily') {
     if (anchor > to) return [];
     const fechas = [];
     let dia = anchor > from ? anchor : from;
     while (dia <= to) {
-      fechas.push(dia);
+      fechas.push(conImporte(dia));
       dia = addDays(dia, 1);
     }
     return fechas;
   }
 
   if (expense.kind === 'once') {
-    return anchor >= from && anchor <= to ? [anchor] : [];
+    return anchor >= from && anchor <= to ? [conImporte(anchor)] : [];
   }
 
   if (anchor > to) return [];
   const fecha = nextDate(expense, from);
-  return fecha && fecha <= to ? [fecha] : [];
+  return fecha && fecha <= to ? [conImporte(fecha)] : [];
+}
+
+/** Importes ajustados a mano de un gasto dentro de un mes. */
+function dayOverrides(expenseId, month) {
+  if (!expenseId) return new Map();
+  const { from, to } = monthRange(month);
+  const filas = db
+    .prepare('SELECT day, amount_cents FROM expense_days WHERE expense_id = ? AND day >= ? AND day <= ?')
+    .all(expenseId, from, to);
+  return new Map(filas.map((f) => [f.day, f.amount_cents]));
+}
+
+/** Pone (o quita, con null) el importe de un día concreto. */
+function setDayAmount(expenseId, day, amountCents) {
+  if (amountCents === null) {
+    db.prepare('DELETE FROM expense_days WHERE expense_id = ? AND day = ?').run(expenseId, day);
+    return;
+  }
+  db.prepare(
+    `INSERT INTO expense_days (expense_id, day, amount_cents) VALUES (?, ?, ?)
+     ON CONFLICT(expense_id, day) DO UPDATE SET amount_cents = excluded.amount_cents`
+  ).run(expenseId, day, amountCents);
+}
+
+/** Días ajustados de un gasto en un mes, ordenados por fecha. */
+function listDayAmounts(expenseId, month) {
+  return [...dayOverrides(expenseId, month).entries()]
+    .map(([day, amount_cents]) => ({ day, amount_cents }))
+    .sort((a, b) => a.day.localeCompare(b.day));
 }
 
 const DIRECTIONS = ['out', 'in'];
@@ -152,15 +188,17 @@ function monthExpenses(month, direction = 'out') {
 
   for (const e of listExpenses({ direction })) {
     if (!e.active) continue;
-    const fechas = monthOccurrences(e, month);
-    if (fechas.length === 0) continue;
+    const dias = monthOccurrences(e, month);
+    if (dias.length === 0) continue;
 
     rows.push({
       ...e,
-      fecha: fechas[0],
-      veces: fechas.length,
-      total_cents: e.amount_cents * fechas.length,
-      pendiente_cents: e.amount_cents * fechas.filter((f) => f > hoy).length,
+      fecha: dias[0].fecha,
+      veces: dias.length,
+      dias,
+      ajustados: dias.filter((d) => d.ajustado).length,
+      total_cents: dias.reduce((a, d) => a + d.amount_cents, 0),
+      pendiente_cents: dias.filter((d) => d.fecha > hoy).reduce((a, d) => a + d.amount_cents, 0),
     });
   }
 
@@ -208,6 +246,8 @@ module.exports = {
   nextDate,
   dateInMonth,
   monthOccurrences,
+  setDayAmount,
+  listDayAmounts,
   listExpenses,
   getExpense,
   createExpense,

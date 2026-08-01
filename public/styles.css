@@ -104,6 +104,16 @@ h1 { font-size: 1.35rem; margin: 4px 0 14px; }
 .muted { color: var(--ink-soft); }
 .small { font-size: .85rem; }
 .nowrap { white-space: nowrap; }
+.only-narrow { display: none; }
+
+/* Ficha de trabajador para el móvil, donde una tabla de 7 columnas no cabe. */
+.wcard { border: 1px solid var(--line); border-radius: 12px; padding: 13px; margin-bottom: 10px; }
+.wcard .top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.wcard .name { font-weight: 700; }
+.wcard .lines { margin-top: 9px; font-size: .88rem; }
+.wcard .lines div { display: flex; justify-content: space-between; padding: 3px 0; }
+.wcard .deja { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; font-weight: 700; }
+.wcard .cta { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 11px; }
 
 /* ---------- Formularios ---------- */
 label { display: block; font-size: .85rem; font-weight: 600; color: var(--ink-soft); margin-bottom: 5px; }
@@ -257,6 +267,8 @@ details.box > *:not(summary) { margin-top: 10px; }
   .who { display: none; }
   /* En el móvil no cabe todo: se esconde lo accesorio antes que recortar cifras. */
   .hide-narrow { display: none; }
+  .only-narrow { display: block; }
+  .wide-only { display: none; }
   .card { padding: 15px; }
   .stat .v { font-size: 1.3rem; }
   th, td { padding: 10px 8px; }

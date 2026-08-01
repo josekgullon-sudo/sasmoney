@@ -80,6 +80,7 @@ test('un gasto diario cae todos los días del mes', () => {
   const { monthOccurrences } = require('../src/expenses');
   const pub = gasto('daily', '2026-07-01');
   assert.equal(monthOccurrences(pub, '2026-07').length, 31);
+  assert.equal(monthOccurrences(pub, '2026-07')[0].fecha, '2026-07-01');
   assert.equal(monthOccurrences(pub, '2026-06').length, 0); // aún no había empezado
   assert.equal(monthOccurrences(pub, '2026-09').length, 30);
   assert.equal(monthOccurrences(gasto('daily', '2026-02-01'), '2026-02').length, 28);
@@ -90,8 +91,8 @@ test('un gasto diario que empieza a mitad de mes sólo cuenta desde ese día', (
   const { monthOccurrences } = require('../src/expenses');
   const fechas = monthOccurrences(gasto('daily', '2026-07-20'), '2026-07');
   assert.equal(fechas.length, 12); // del 20 al 31
-  assert.equal(fechas[0], '2026-07-20');
-  assert.equal(fechas[fechas.length - 1], '2026-07-31');
+  assert.equal(fechas[0].fecha, '2026-07-20');
+  assert.equal(fechas[fechas.length - 1].fecha, '2026-07-31');
 });
 
 test('el próximo pago de un gasto diario es hoy mismo', () => {

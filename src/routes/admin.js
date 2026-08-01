@@ -12,6 +12,8 @@ const {
 } = require('../commission');
 const { todayISO, currentMonth, monthRange, isValidDate, formatDate } = require('../util');
 const expenses = require('../expenses');
+const investment = require('../investment');
+const cajaViews = require('../views/caja');
 const views = require('../views/admin');
 const { PAYMENT_METHODS, metodoLegible } = require('../views/worker');
 
@@ -26,7 +28,7 @@ router.get('/', (req, res) => {
   const month = validMonth(req.query.month);
   const { from, to } = monthRange(month);
 
-  const rows = repo.settlementRows({ from, to, pendingOnly: false }).map((r) => {
+  const base = repo.settlementRows({ from, to, pendingOnly: false }).map((r) => {
     const pending = repo.totalsFor({ userId: r.user.id, from, to, pendingOnly: true });
     const pendingCalc = calcCommission(r.user, {
       totalCents: pending.totalCents,
@@ -35,20 +37,26 @@ router.get('/', (req, res) => {
     return { ...r, pendingCommissionCents: pendingCalc.commissionCents };
   });
 
-  const totals = rows.reduce(
+  const totals = base.reduce(
     (acc, r) => ({
       count: acc.count + r.count,
       totalCents: acc.totalCents + r.totalCents,
       commissionCents: acc.commissionCents + r.calc.commissionCents,
-      companyCents: acc.companyCents + r.calc.companyCents,
     }),
-    { count: 0, totalCents: 0, commissionCents: 0, companyCents: 0 }
+    { count: 0, totalCents: 0, commissionCents: 0 }
   );
 
-  const delMes = expenses.monthExpenses(month, 'out');
-  const hoy = todayISO();
-  const proximos = expenses.upcoming({ dias: 92, direction: 'out' });
+  const gastosMes = expenses.monthExpenses(month, 'out');
   const ingresosMes = expenses.monthExpenses(month, 'in');
+  const inversionCents = gastosMes.filter((g) => g.is_investment).reduce((a, g) => a + g.total_cents, 0);
+  const otrosGastosCents = gastosMes.filter((g) => !g.is_investment).reduce((a, g) => a + g.total_cents, 0);
+
+  const modo = investment.getMode();
+  const rows = investment
+    .split(inversionCents, base.sort((a, b) => b.totalCents - a.totalCents), modo)
+    .map((r) => ({ ...r, repartoManual: modo === 'manual' }));
+
+  const proximos = expenses.upcoming({ dias: 92, direction: 'out' });
 
   res.send(
     views.adminHome({
@@ -56,22 +64,25 @@ router.get('/', (req, res) => {
       flash: res.locals.flash,
       warning: res.locals.warning,
       month,
-      rows: rows.sort((a, b) => b.totalCents - a.totalCents),
+      rows,
       totals,
       pendingTotalCents: rows.reduce((a, r) => a + r.pendingCommissionCents, 0),
+      inversionCents,
+      otrosGastosCents,
       gastos: {
-        delMes,
-        totalCents: delMes.reduce((a, g) => a + g.total_cents, 0),
-        pendientesCents: delMes.reduce((a, g) => a + g.pendiente_cents, 0),
-        inversionCents: delMes.filter((g) => g.is_investment).reduce((a, g) => a + g.total_cents, 0),
+        totalCents: gastosMes.reduce((a, g) => a + g.total_cents, 0),
+        pendientesCents: gastosMes.reduce((a, g) => a + g.pendiente_cents, 0),
         proximo: proximos[0] || null,
       },
-      ingresos: {
-        delMes: ingresosMes,
-        totalCents: ingresosMes.reduce((a, g) => a + g.total_cents, 0),
-      },
+      ingresos: { totalCents: ingresosMes.reduce((a, g) => a + g.total_cents, 0) },
     })
   );
+});
+
+// La rentabilidad ya vive dentro del resumen.
+router.get('/rentabilidad', (req, res) => {
+  const q = req.query.month ? `?month=${encodeURIComponent(String(req.query.month))}` : '';
+  res.redirect(`/admin${q}`);
 });
 
 /* ------------------------------------------------------------- Liquidación */
@@ -177,62 +188,6 @@ router.get('/liquidacion.csv', (req, res) => {
     ]);
   }
   sendCsv(res, `liquidacion_${from}_${to}.csv`, lines);
-});
-
-/* ------------------------------------------------------------- Rentabilidad */
-
-router.get('/rentabilidad', (req, res) => {
-  const month = validMonth(req.query.month);
-  const { from, to } = monthRange(month);
-
-  const base = repo.settlementRows({ from, to, pendingOnly: false });
-  const totals = base.reduce(
-    (acc, r) => ({
-      count: acc.count + r.count,
-      totalCents: acc.totalCents + r.totalCents,
-      commissionCents: acc.commissionCents + r.calc.commissionCents,
-    }),
-    { count: 0, totalCents: 0, commissionCents: 0 }
-  );
-
-  const gastosMes = expenses.monthExpenses(month, 'out');
-  const inversionCents = gastosMes.filter((g) => g.is_investment).reduce((a, g) => a + g.total_cents, 0);
-  const otrosGastosCents = gastosMes.filter((g) => !g.is_investment).reduce((a, g) => a + g.total_cents, 0);
-  const ingresosCents = expenses.monthExpensesTotal(month, 'in');
-
-  // La inversión se reparte en proporción a lo facturado. El último reparto se
-  // ajusta con lo que quede para que la suma cuadre al céntimo con el total.
-  let repartido = 0;
-  const rows = base
-    .sort((a, b) => b.totalCents - a.totalCents)
-    .map((r, i, arr) => {
-      const esUltima = i === arr.length - 1;
-      const suya = esUltima
-        ? inversionCents - repartido
-        : totals.totalCents > 0
-          ? Math.round((inversionCents * r.totalCents) / totals.totalCents)
-          : 0;
-      repartido += suya;
-      return {
-        ...r,
-        inversionCents: suya,
-        beneficioCents: r.totalCents - r.calc.commissionCents - suya,
-      };
-    });
-
-  res.send(
-    views.adminProfit({
-      user: req.user,
-      flash: res.locals.flash,
-      warning: res.locals.warning,
-      month,
-      rows,
-      totals,
-      inversionCents,
-      otrosGastosCents,
-      ingresosCents,
-    })
-  );
 });
 
 /* ------------------------------------------------------------ Trabajadores */
@@ -514,15 +469,15 @@ router.post('/servicios/:id/borrar', (req, res) => {
   res.redirect('/admin/servicios');
 });
 
-/* ------------------------------------------------------------------- Gastos */
+/* -------------------------------------------------------------------- Caja */
 
-/** Lee y valida el formulario de un gasto. */
-function readExpenseForm(body) {
+/** Lee y valida el formulario de un gasto o ingreso. */
+function readMovementForm(body) {
   const name = String(body.name || '').trim().slice(0, 80);
-  if (!name) return { error: 'Ponle un concepto al gasto.' };
+  if (!name) return { error: 'Ponle un concepto.' };
 
   const amount_cents = parseAmountToCents(body.amount);
-  if (amount_cents === null) return { error: 'Escribe un importe válido, por ejemplo 120 o 120,50.' };
+  if (amount_cents === null) return { error: 'Escribe un importe válido, por ejemplo 20 o 20,50.' };
   if (amount_cents === 0) return { error: 'El importe no puede ser 0 €.' };
 
   const kind = expenses.KINDS.includes(body.kind) ? body.kind : 'monthly';
@@ -541,87 +496,152 @@ function readExpenseForm(body) {
   };
 }
 
-/**
- * Gastos e ingresos comparten pantalla y rutas: sólo cambia la dirección del
- * dinero y las palabras. Así no hay dos copias de lo mismo que mantener.
- */
-function montarMovimientos(direction) {
-  // Ruta dentro del router, que ya cuelga de /admin.
-  const ruta = direction === 'in' ? '/ingresos' : '/gastos';
-  const url = `/admin${ruta}`;
-  const palabra = direction === 'in' ? 'Ingreso' : 'Gasto';
+router.get('/caja', (req, res) => {
+  const month = validMonth(req.query.month);
 
-  router.get(ruta, (req, res) => {
-    const month = validMonth(req.query.month);
+  const conMes = (direction) => {
     const delMes = expenses.monthExpenses(month, direction);
-    const proximos = expenses.upcoming({ dias: 92, direction });
-
-    // A cada apunte se le calcula cuándo toca el siguiente.
     const porId = new Map(delMes.map((g) => [g.id, g]));
-    const todos = expenses.listExpenses({ direction }).map((g) => ({
-      ...g,
-      proximo: g.active ? expenses.nextDate(g) : null,
-      esteMes: porId.get(g.id) || null,
-    }));
+    return {
+      delMes,
+      todos: expenses.listExpenses({ direction }).map((g) => ({ ...g, esteMes: porId.get(g.id) || null })),
+      proximos: expenses.upcoming({ dias: 92, direction }),
+      totalCents: delMes.reduce((a, g) => a + g.total_cents, 0),
+    };
+  };
 
-    // Sólo se abre para editar si es de esta pantalla: un gasto no se edita
-    // desde ingresos ni al revés.
-    const pedido = req.query.editar ? expenses.getExpense(Number(req.query.editar)) : null;
-    const editar = pedido && pedido.direction === direction ? pedido : null;
+  const gastos = conMes('out');
+  const ingresos = conMes('in');
+  const inversionCents = gastos.delMes
+    .filter((g) => g.is_investment)
+    .reduce((a, g) => a + g.total_cents, 0);
 
-    res.send(
-      views.adminExpenses({
-        user: req.user,
-        flash: res.locals.flash,
-        warning: res.locals.warning,
-        month,
-        direction,
-        expenses: todos,
-        delMes,
-        totalMesCents: delMes.reduce((a, g) => a + g.total_cents, 0),
-        proximos,
-        editando: editar,
-        hoy: todayISO(),
-      })
-    );
+  const { from, to } = monthRange(month);
+  const servicios = repo.settlementRows({ from, to, pendingOnly: false });
+  const facturadoCents = servicios.reduce((a, r) => a + r.totalCents, 0);
+  const comisionesCents = servicios.reduce((a, r) => a + r.calc.commissionCents, 0);
+
+  const editando = req.query.editar ? expenses.getExpense(Number(req.query.editar)) : null;
+
+  res.send(
+    cajaViews.adminCaja({
+      user: req.user,
+      flash: res.locals.flash,
+      warning: res.locals.warning,
+      month,
+      hoy: todayISO(),
+      gastos,
+      ingresos,
+      totales: {
+        entraCents: facturadoCents + ingresos.totalCents,
+        gastosCents: gastos.totalCents,
+        inversionCents,
+        quedaCents: facturadoCents + ingresos.totalCents - comisionesCents - gastos.totalCents,
+      },
+      editando,
+      diasAjustados: editando ? expenses.listDayAmounts(editando.id, month) : [],
+      workers: repo.listWorkers({ includeInactive: true }),
+      reparto: investment.getMode(),
+    })
+  );
+});
+
+router.post('/caja', (req, res) => {
+  const direction = req.body.direction === 'in' ? 'in' : 'out';
+  const { data, error } = readMovementForm(req.body);
+  if (error) {
+    res.flash('error', error);
+    return res.redirect('/admin/caja');
+  }
+  // Un ingreso nunca es "inversión": eso es cosa de los gastos.
+  expenses.createExpense({ ...data, direction, is_investment: direction === 'in' ? 0 : data.is_investment });
+  res.flash('ok', `"${data.name}" añadido.`);
+  res.redirect('/admin/caja');
+});
+
+router.post('/caja/reparto', (req, res) => {
+  investment.setMode(req.body.reparto);
+
+  const ids = [].concat(req.body.worker_id || []);
+  const shares = [].concat(req.body.share || []);
+  investment.setShares(
+    ids.map((id, i) => ({
+      id: Number(id),
+      share: Number(String(shares[i] ?? '0').replace(',', '.')),
+    }))
+  );
+
+  res.flash(
+    'ok',
+    investment.getMode() === 'manual'
+      ? 'Reparto guardado: la inversión se reparte con los porcentajes que has puesto.'
+      : 'Reparto guardado: la inversión se reparte según lo que factura cada uno.'
+  );
+  res.redirect('/admin/caja');
+});
+
+router.post('/caja/:id', (req, res) => {
+  const mov = expenses.getExpense(Number(req.params.id));
+  if (!mov) return res.status(404).send('No encontrado.');
+
+  const { data, error } = readMovementForm(req.body);
+  if (error) {
+    res.flash('error', error);
+    return res.redirect(`/admin/caja?editar=${mov.id}`);
+  }
+  expenses.updateExpense(mov.id, {
+    ...data,
+    is_investment: mov.direction === 'in' ? 0 : data.is_investment,
+    active: req.body.active ? 1 : 0,
   });
+  res.flash('ok', 'Guardado.');
+  res.redirect('/admin/caja');
+});
 
-  router.post(ruta, (req, res) => {
-    const { data, error } = readExpenseForm(req.body);
-    if (error) {
-      res.flash('error', error);
-      return res.redirect(url);
-    }
-    expenses.createExpense({ ...data, direction });
-    res.flash('ok', `${palabra} "${data.name}" añadido.`);
-    res.redirect(url);
-  });
+/** Cambia (o devuelve al normal) el importe de un día suelto. */
+router.post('/caja/:id/dia', (req, res) => {
+  const mov = expenses.getExpense(Number(req.params.id));
+  if (!mov) return res.status(404).send('No encontrado.');
 
-  router.post(`${ruta}/:id`, (req, res) => {
-    const mov = expenses.getExpense(Number(req.params.id));
-    if (!mov || mov.direction !== direction) return res.status(404).send('No encontrado.');
+  const month = validMonth(req.body.month);
+  const day = String(req.body.day || '').trim();
+  const volver = `/admin/caja?editar=${mov.id}&month=${month}`;
 
-    const { data, error } = readExpenseForm(req.body);
-    if (error) {
-      res.flash('error', error);
-      return res.redirect(`${url}?editar=${mov.id}`);
-    }
-    expenses.updateExpense(mov.id, { ...data, active: req.body.active ? 1 : 0 });
-    res.flash('ok', `${palabra} guardado.`);
-    res.redirect(url);
-  });
+  if (!isValidDate(day)) {
+    res.flash('error', 'La fecha no es válida.');
+    return res.redirect(volver);
+  }
 
-  router.post(`${ruta}/:id/borrar`, (req, res) => {
-    const mov = expenses.getExpense(Number(req.params.id));
-    if (!mov || mov.direction !== direction) return res.status(404).send('No encontrado.');
-    expenses.deleteExpense(mov.id);
-    res.flash('ok', `${palabra} "${mov.name}" borrado.`);
-    res.redirect(url);
-  });
-}
+  if (req.body.quitar) {
+    expenses.setDayAmount(mov.id, day, null);
+    res.flash('ok', `El ${formatDate(day)} vuelve al importe de siempre.`);
+    return res.redirect(volver);
+  }
 
-montarMovimientos('out');
-montarMovimientos('in');
+  const amount_cents = parseAmountToCents(req.body.amount);
+  if (amount_cents === null) {
+    res.flash('error', 'Escribe un importe válido.');
+    return res.redirect(volver);
+  }
+
+  expenses.setDayAmount(mov.id, day, amount_cents);
+  res.flash('ok', `El ${formatDate(day)} queda en ${formatEuro(amount_cents)}.`);
+  res.redirect(volver);
+});
+
+router.post('/caja/:id/borrar', (req, res) => {
+  const mov = expenses.getExpense(Number(req.params.id));
+  if (!mov) return res.status(404).send('No encontrado.');
+  expenses.deleteExpense(mov.id);
+  res.flash('ok', `"${mov.name}" borrado.`);
+  res.redirect('/admin/caja');
+});
+
+// Las pantallas separadas de antes llevan a la nueva.
+router.get(['/gastos', '/ingresos'], (req, res) => {
+  const q = req.query.month ? `?month=${encodeURIComponent(String(req.query.month))}` : '';
+  res.redirect(`/admin/caja${q}`);
+});
 
 /* ------------------------------------------------------------------ Ayudas */
 

@@ -24,24 +24,18 @@ Pensada para usarse desde el móvil: apuntar un cobro son dos toques.
 
 ### Para el jefe
 
-- **Resumen**: lo facturado del mes, lo que se llevan ellas y lo que queda para la empresa.
-- **Liquidación**: eliges **una trabajadora o todas** y el periodo (un mes entero o dos
-  fechas sueltas), y te sale lo que le tienes que pagar con su desglose. Cuando le pagues,
-  pulsas *Liquidado*: su cuenta de ese periodo vuelve a cero, esos servicios quedan
-  cerrados y ya no se cuentan otra vez ni se pueden modificar. Cada trabajadora se liquida
-  por separado, sin afectar a las demás.
-- **Trabajadores**: das de alta a cada una, le pones su usuario y su contraseña, y decides
-  cuánto se lleva.
-- **Servicios**: todos los cobros, con filtros y descarga en CSV (se abre con Excel).
-- **Rentabilidad**: qué deja cada trabajadora una vez pagada su comisión y su parte de la
-  publicidad, con el margen y el retorno por euro invertido.
-- **Gastos**: lo que paga la empresa, sueltos o recurrentes (**diarios**, mensuales,
-  trimestrales o anuales). Los recurrentes se repiten solos y el Resumen los descuenta
-  para decirte lo que queda de verdad a fin de mes. Un gasto se puede marcar como
-  **inversión** (publicidad y similares) para que entre en la rentabilidad.
-- **Ingresos**: dinero que entra por otro lado, aparte de lo que facturan las trabajadoras
-  (una venta suelta, una subvención, un alquiler...). También pueden repetirse solos y se
-  suman a la caja del mes.
+Cinco pantallas, cada una con una pregunta clara:
+
+- **Resumen** — *¿cómo va el mes?* Lo que entra, lo que se llevan ellas, los gastos y lo que
+  queda. Y una fila por trabajador con lo que factura, su comisión, su parte de la inversión,
+  **lo que deja** y lo que le debes, con el botón de liquidar al lado.
+- **Liquidar** — *¿cuánto le pago a X?* Eliges una trabajadora o todas y el periodo. Cuando le
+  pagues, pulsas *Liquidado* y su cuenta de ese periodo vuelve a cero: esos servicios quedan
+  cerrados y ya no se cuentan otra vez ni se pueden modificar.
+- **Caja** — *¿qué entra y qué sale por fuera de los servicios?* Gastos e ingresos, sueltos o
+  recurrentes (**diarios**, mensuales, trimestrales o anuales), y el reparto de la inversión.
+- **Servicios** — todos los cobros, con filtros y descarga en CSV.
+- **Trabajadores** — altas, contraseñas y cuánto se lleva cada una.
 
 ## Las tres formas de pagar a una trabajadora
 
@@ -165,11 +159,12 @@ docker run -p 4400:4400 -v sasmoney-data:/data \
   los gastos.
 - **Un gasto diario cuenta tantas veces como días tenga el mes**: 20 €/día son 620 € en un
   mes de 31 días y 560 € en febrero. Si empieza a mitad de mes, sólo cuentan los días desde
-  esa fecha.
-- **La inversión se reparte en proporción a lo facturado.** Quien hace el 60 % de la
-  facturación carga con el 60 % de la publicidad; el último reparto se ajusta con lo que
-  quede para que la suma cuadre al céntimo. Los demás gastos no se reparten, porque no
-  dependen de quién trabaje.
+  esa fecha. Y se puede **cambiar el importe de un día suelto** sin tocar los demás, para los
+  días en que se invierte más o menos.
+- **La inversión se reparte de una de dos maneras**, a elegir en Caja: según lo que factura
+  cada uno, o **a mano** con el porcentaje que decidas (por ejemplo 20 % y 80 %). En los dos
+  casos el último reparto se ajusta con lo que quede para que la suma cuadre al céntimo. Los
+  demás gastos no se reparten, porque no dependen de quién trabaje.
 - **Cada trabajadora sólo ve lo suyo.** El acceso a la parte del jefe está cerrado por rol.
 - **Las contraseñas no se pueden probar a lo bruto**: tras 8 fallos seguidos, esa
   combinación de usuario y origen queda bloqueada 15 minutos.

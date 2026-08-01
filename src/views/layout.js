@@ -41,12 +41,10 @@ function nav(user, active) {
     user.role === 'admin'
       ? [
           ['/admin', 'Resumen', 'resumen'],
-          ['/admin/liquidacion', 'Liquidación', 'liquidacion'],
-          ['/admin/rentabilidad', 'Rentabilidad', 'rentabilidad'],
-          ['/admin/trabajadores', 'Trabajadores', 'trabajadores'],
+          ['/admin/liquidacion', 'Liquidar', 'liquidacion'],
+          ['/admin/caja', 'Caja', 'caja'],
           ['/admin/servicios', 'Servicios', 'servicios'],
-          ['/admin/gastos', 'Gastos', 'gastos'],
-          ['/admin/ingresos', 'Ingresos', 'ingresos'],
+          ['/admin/trabajadores', 'Trabajadores', 'trabajadores'],
         ]
       : [
           ['/', 'Hoy', 'hoy'],

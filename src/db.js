@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS users (
   -- Regla de comisión: 'percent' | 'tiers' | 'fixed'
   commission_type  TEXT    NOT NULL DEFAULT 'percent',
   commission_percent REAL  NOT NULL DEFAULT 0,       -- para 'percent'
+  investment_share REAL   NOT NULL DEFAULT 0,       -- % de la inversión que carga
   fixed_cents      INTEGER NOT NULL DEFAULT 0,       -- para 'fixed' (por servicio)
   tiers_json       TEXT    NOT NULL DEFAULT '[]',    -- para 'tiers'
   tier_mode        TEXT    NOT NULL DEFAULT 'total' CHECK (tier_mode IN ('total','progressive')),
@@ -124,6 +125,15 @@ CREATE TABLE IF NOT EXISTS expenses (
 
 CREATE INDEX IF NOT EXISTS idx_expenses_active ON expenses(active, anchor_date);
 
+-- Importe distinto para un día concreto de un gasto diario: unos días se
+-- invierte más y otros menos, sin tener que crear un gasto nuevo.
+CREATE TABLE IF NOT EXISTS expense_days (
+  expense_id   INTEGER NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+  day          TEXT    NOT NULL,
+  amount_cents INTEGER NOT NULL CHECK (amount_cents >= 0),
+  PRIMARY KEY (expense_id, day)
+);
+
 CREATE TABLE IF NOT EXISTS sessions (
   token      TEXT PRIMARY KEY,
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -155,6 +165,13 @@ function migrate() {
 
   // El CHECK de 'kind' no admitía los gastos diarios y SQLite no deja cambiar un
   // CHECK: hay que rehacer la tabla copiando lo que hubiera dentro.
+  const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+  if (!userCols.includes('investment_share')) {
+    // Qué porcentaje de la inversión carga cada trabajador cuando el reparto
+    // se hace a mano en lugar de por facturación.
+    db.exec('ALTER TABLE users ADD COLUMN investment_share REAL NOT NULL DEFAULT 0');
+  }
+
   const esquema = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='expenses'").get();
   if (esquema && !esquema.sql.includes("'daily'")) {
     db.exec(`
