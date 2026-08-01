@@ -47,7 +47,7 @@ ${e ? formularioEdicion(e, esIngreso, diasAjustados, month, hoy) : ''}
   ${listaMovimientos(ingresos.todos, 'in')}
 </div>
 
-${tarjetaReparto(workers, reparto, totales.inversionCents)}
+${tarjetaReparto(workers, totales.inversionCents, reparto, month)}
 
 <div class="card">
   <h2>Lo que viene</h2>
@@ -280,62 +280,88 @@ function listaMovimientos(filas, direction) {
 </table></div>`;
 }
 
-/** Quién carga con qué parte de la publicidad. */
-function tarjetaReparto(workers, reparto, inversionCents) {
-  const suma = workers.reduce((a, w) => a + (Number(w.investment_share) || 0), 0);
-  const manual = reparto === 'manual';
+/** Quién carga con qué parte de la publicidad. Los porcentajes los pone el jefe. */
+function tarjetaReparto(workers, inversionCents, reparto, month) {
+  const suma = reparto.sumaPercent;
+  const fmt = (n) => String(Number(n) % 1 === 0 ? n : n.toFixed(1)).replace('.', ',');
 
   return `<div class="card">
   <h2>Reparto de la inversión</h2>
-  <p class="sub">De los ${money(inversionCents)} de inversión de este mes, cuánto carga cada trabajador.
-     Es lo que decide su rentabilidad.</p>
+  <p class="sub">Le dices a cada uno qué porcentaje de la publicidad carga. Ese porcentaje se
+     mantiene mes tras mes hasta que lo cambies, y es lo que decide su rentabilidad.</p>
 
-  <form method="post" action="/admin/caja/reparto">
-    <div class="field">
-      <label style="display:flex;align-items:center;gap:9px;font-weight:500;color:var(--ink)">
-        <input type="radio" name="reparto" value="facturacion" ${manual ? '' : 'checked'} style="width:auto">
-        <span><strong>Según lo que factura cada uno.</strong>
-          Quien hace el 60 % de la facturación carga con el 60 % de la publicidad.</span>
-      </label>
-    </div>
-    <div class="field">
-      <label style="display:flex;align-items:center;gap:9px;font-weight:500;color:var(--ink)">
-        <input type="radio" name="reparto" value="manual" ${manual ? 'checked' : ''} style="width:auto">
-        <span><strong>A mano.</strong> Lo decides tú, por ejemplo 20 % y 80 %.</span>
-      </label>
-    </div>
-
-    ${
-      workers.length === 0
-        ? emptyState('Da de alta trabajadores para poder repartir.')
-        : `<div class="table-wrap"><table>
-      <thead><tr><th>Trabajador</th><th class="num" style="width:150px">Su porcentaje</th></tr></thead>
+  ${
+    workers.length === 0
+      ? emptyState('Da de alta trabajadores para poder repartir.')
+      : `<form method="post" action="/admin/caja/reparto">
+    <input type="hidden" name="month" value="${esc(month)}">
+    <div class="table-wrap"><table>
+      <thead><tr>
+        <th>Trabajador</th>
+        <th class="num" style="width:130px">Su porcentaje</th>
+        <th class="num hide-narrow">Le toca este mes</th>
+      </tr></thead>
       <tbody>
-        ${workers
+        ${reparto.rows
           .map(
-            (w) => `<tr>
-          <td>${esc(w.name)}</td>
+            (r) => `<tr>
+          <td>${esc(r.user.name)}</td>
           <td class="num">
-            <input type="hidden" name="worker_id" value="${w.id}">
+            <input type="hidden" name="worker_id" value="${r.user.id}">
             <input name="share" inputmode="decimal" style="text-align:right"
-                   value="${esc(String(w.investment_share || 0).replace('.', ','))}">
+                   value="${esc(fmt(r.sharePercent))}" aria-label="Porcentaje de ${esc(r.user.name)}">
           </td>
+          <td class="num hide-narrow">${money(r.inversionCents)}</td>
         </tr>`
           )
           .join('')}
+        ${
+          reparto.sinAsignarCents > 0
+            ? `<tr>
+          <td class="muted">Sin asignar <span class="small">(lo paga la empresa)</span></td>
+          <td class="num muted">${esc(fmt(Math.max(0, 100 - suma)))} %</td>
+          <td class="num hide-narrow muted">${money(reparto.sinAsignarCents)}</td>
+        </tr>`
+            : ''
+        }
       </tbody>
-      <tfoot><tr><td>Suma</td><td class="num">${suma.toFixed(1).replace('.', ',')} %</td></tr></tfoot>
+      <tfoot><tr>
+        <td>Suma</td>
+        <td class="num">${esc(fmt(suma))} %</td>
+        <td class="num hide-narrow">${money(inversionCents)}</td>
+      </tr></tfoot>
     </table></div>
+
     ${
-      manual && Math.abs(suma - 100) > 0.05
-        ? `<div class="banner warn" style="margin-top:12px">Los porcentajes suman ${suma
-            .toFixed(1)
-            .replace('.', ',')} %, no 100 %. Se reparte igualmente en esa proporción, pero repásalo.</div>`
+      suma > 100.05
+        ? `<div class="banner error" style="margin-top:12px">Los porcentajes suman ${esc(
+            fmt(suma)
+          )} %, más de 100. Se aplica lo que has puesto, así que estarías repartiendo más
+            publicidad de la que hay. Repásalo.</div>`
         : ''
-    }`
     }
-    <button class="btn" type="submit" style="margin-top:12px">Guardar el reparto</button>
-  </form>
+    ${
+      suma < 99.95
+        ? `<p class="sub" style="margin-top:12px">Suman ${esc(
+            fmt(suma)
+          )} %: el ${esc(fmt(Math.max(0, 100 - suma)))} % restante (${money(
+            reparto.sinAsignarCents
+          )}) no carga sobre nadie y se queda como gasto de la empresa. Si quieres que se lo
+          repartan entre todos, que sumen 100.</p>`
+        : ''
+    }
+
+    <div class="actions" style="margin-top:12px">
+      <button class="btn" type="submit">Guardar los porcentajes</button>
+      <button class="btn ghost" type="submit" name="segun_facturacion" value="1"
+              data-confirm="Se van a sustituir los porcentajes por los que salen de lo facturado este mes. ¿Sigo?">
+        Calcular según lo facturado
+      </button>
+    </div>
+    <p class="hint">El segundo botón sólo rellena los huecos con lo que ha facturado cada uno
+       este mes, por si quieres partir de ahí. Luego los cambias a mano.</p>
+  </form>`
+  }
 </div>`;
 }
 

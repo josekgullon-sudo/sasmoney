@@ -51,10 +51,8 @@ router.get('/', (req, res) => {
   const inversionCents = gastosMes.filter((g) => g.is_investment).reduce((a, g) => a + g.total_cents, 0);
   const otrosGastosCents = gastosMes.filter((g) => !g.is_investment).reduce((a, g) => a + g.total_cents, 0);
 
-  const modo = investment.getMode();
-  const rows = investment
-    .split(inversionCents, base.sort((a, b) => b.totalCents - a.totalCents), modo)
-    .map((r) => ({ ...r, repartoManual: modo === 'manual' }));
+  const reparto = investment.split(inversionCents, base.sort((a, b) => b.totalCents - a.totalCents));
+  const rows = reparto.rows;
 
   const proximos = expenses.upcoming({ dias: 92, direction: 'out' });
 
@@ -68,6 +66,7 @@ router.get('/', (req, res) => {
       totals,
       pendingTotalCents: rows.reduce((a, r) => a + r.pendingCommissionCents, 0),
       inversionCents,
+      inversionSinAsignarCents: reparto.sinAsignarCents,
       otrosGastosCents,
       gastos: {
         totalCents: gastosMes.reduce((a, g) => a + g.total_cents, 0),
@@ -523,6 +522,13 @@ router.get('/caja', (req, res) => {
 
   const editando = req.query.editar ? expenses.getExpense(Number(req.query.editar)) : null;
 
+  // Para el reparto hacen falta todos los trabajadores, hayan facturado o no.
+  const workers = repo.listWorkers({ includeInactive: true });
+  const porUsuario = new Map(servicios.map((r) => [r.user.id, r]));
+  const filasReparto = workers.map(
+    (w) => porUsuario.get(w.id) || { user: w, totalCents: 0, calc: { commissionCents: 0 } }
+  );
+
   res.send(
     cajaViews.adminCaja({
       user: req.user,
@@ -540,8 +546,8 @@ router.get('/caja', (req, res) => {
       },
       editando,
       diasAjustados: editando ? expenses.listDayAmounts(editando.id, month) : [],
-      workers: repo.listWorkers({ includeInactive: true }),
-      reparto: investment.getMode(),
+      workers,
+      reparto: investment.split(inversionCents, filasReparto),
     })
   );
 });
@@ -560,7 +566,16 @@ router.post('/caja', (req, res) => {
 });
 
 router.post('/caja/reparto', (req, res) => {
-  investment.setMode(req.body.reparto);
+  const month = validMonth(req.body.month);
+
+  // El atajo rellena los porcentajes con lo que ha facturado cada uno este mes.
+  if (req.body.segun_facturacion) {
+    const { from, to } = monthRange(month);
+    const filas = repo.settlementRows({ from, to, pendingOnly: false, includeEmpty: true });
+    investment.setShares(investment.sharesFromBilling(filas));
+    res.flash('ok', 'Porcentajes calculados con lo facturado este mes. Cámbialos si quieres.');
+    return res.redirect(`/admin/caja?month=${month}`);
+  }
 
   const ids = [].concat(req.body.worker_id || []);
   const shares = [].concat(req.body.share || []);
@@ -571,13 +586,8 @@ router.post('/caja/reparto', (req, res) => {
     }))
   );
 
-  res.flash(
-    'ok',
-    investment.getMode() === 'manual'
-      ? 'Reparto guardado: la inversión se reparte con los porcentajes que has puesto.'
-      : 'Reparto guardado: la inversión se reparte según lo que factura cada uno.'
-  );
-  res.redirect('/admin/caja');
+  res.flash('ok', 'Porcentajes guardados. Se aplican a partir de ahora en todos los meses.');
+  res.redirect(`/admin/caja?month=${month}`);
 });
 
 router.post('/caja/:id', (req, res) => {

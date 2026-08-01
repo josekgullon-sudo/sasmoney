@@ -8,7 +8,7 @@ const { PAYMENT_METHODS, metodoLegible } = require('./worker');
 
 function adminHome({
   user, flash, warning, month, rows, totals, pendingTotalCents,
-  gastos, ingresos, inversionCents, otrosGastosCents,
+  gastos, ingresos, inversionCents, inversionSinAsignarCents, otrosGastosCents,
 }) {
   const quedaCents = totals.totalCents - totals.commissionCents + ingresos.totalCents - gastos.totalCents;
   const pct = (parte, todo) => (todo > 0 ? (parte / todo) * 100 : 0);
@@ -107,8 +107,10 @@ ${stats([
       <td>Total</td>
       <td class="num">${money(totals.totalCents)}</td>
       <td class="num hide-narrow">${money(totals.commissionCents)}</td>
-      <td class="num hide-narrow">${money(inversionCents)}</td>
-      <td class="num">${money(totals.totalCents - totals.commissionCents - inversionCents)}</td>
+      <td class="num hide-narrow">${money(inversionCents - inversionSinAsignarCents)}</td>
+      <td class="num">${money(
+        totals.totalCents - totals.commissionCents - (inversionCents - inversionSinAsignarCents)
+      )}</td>
       <td class="num hide-narrow"></td>
       <td class="num">${money(pendingTotalCents)}</td>
     </tr></tfoot>
@@ -119,10 +121,12 @@ ${stats([
     <p class="small"><strong>Deja</strong>: lo que factura menos su comisión y menos su parte de la inversión.
        Es lo que aporta de verdad a la empresa.</p>
     <p class="small"><strong>A liquidar</strong>: lo que le debes ahora mismo, de lo que aún no le has pagado.</p>
-    <p class="small"><strong>Su inversión</strong>: la parte de la publicidad que carga.
-       ${esc(
-         repartoLabel(rows)
-       )} Se cambia en <a href="/admin/caja">Caja</a>.</p>
+    <p class="small"><strong>Su inversión</strong>: el porcentaje de la publicidad que le has
+       asignado. Se cambia en <a href="/admin/caja">Caja</a>.${
+         inversionSinAsignarCents > 0
+           ? ` Ahora mismo quedan ${money(inversionSinAsignarCents)} sin asignar a nadie.`
+           : ''
+       }</p>
   </details>
 </div>
 
@@ -173,13 +177,6 @@ ${stats([
 </div>`;
 
   return layout({ title: 'Resumen', user, body, active: 'resumen', flash, warning });
-}
-
-/** Frase corta que explica de dónde sale el reparto que se está viendo. */
-function repartoLabel(rows) {
-  return rows.some((r) => r.repartoManual)
-    ? 'Ahora mismo lo repartes tú a mano.'
-    : 'Ahora mismo se reparte según lo que factura cada uno.';
 }
 
 function adminSettlement({ user, flash, warning, from, to, month, onlyPending, rows, totals, history, workers, workerId }) {

@@ -161,10 +161,12 @@ docker run -p 4400:4400 -v sasmoney-data:/data \
   mes de 31 días y 560 € en febrero. Si empieza a mitad de mes, sólo cuentan los días desde
   esa fecha. Y se puede **cambiar el importe de un día suelto** sin tocar los demás, para los
   días en que se invierte más o menos.
-- **La inversión se reparte de una de dos maneras**, a elegir en Caja: según lo que factura
-  cada uno, o **a mano** con el porcentaje que decidas (por ejemplo 20 % y 80 %). En los dos
-  casos el último reparto se ajusta con lo que quede para que la suma cuadre al céntimo. Los
-  demás gastos no se reparten, porque no dependen de quién trabaje.
+- **La inversión la repartes tú**: en Caja le pones a cada trabajador su porcentaje fijo
+  (60 %, 30 %…) y se aplica tal cual, mes tras mes, hasta que lo cambies. El porcentaje que
+  escribes es el que se usa: si suman 90, el 10 % restante **queda sin asignar** y lo paga la
+  empresa, sin cargarlo a nadie. Hay un botón que rellena los porcentajes con lo que ha
+  facturado cada uno, por si quieres partir de ahí, pero es sólo un atajo.
+- Los demás gastos no se reparten, porque no dependen de quién trabaje.
 - **Cada trabajadora sólo ve lo suyo.** El acceso a la parte del jefe está cerrado por rol.
 - **Las contraseñas no se pueden probar a lo bruto**: tras 8 fallos seguidos, esa
   combinación de usuario y origen queda bloqueada 15 minutos.
