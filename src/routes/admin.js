@@ -10,7 +10,7 @@ const {
   formatEuro,
   COMMISSION_TYPES,
 } = require('../commission');
-const { todayISO, currentMonth, monthRange, isValidDate, formatDate } = require('../util');
+const { todayISO, nowHM, isValidTime, currentMonth, monthRange, isValidDate, formatDate } = require('../util');
 const expenses = require('../expenses');
 const investment = require('../investment');
 const cajaViews = require('../views/caja');
@@ -388,6 +388,7 @@ router.get('/servicios', (req, res) => {
       filters: { month, worker, qs },
       totalCents: entries.reduce((a, e) => a + e.amount_cents, 0),
       today: todayISO(),
+      ahora: nowHM(),
     })
   );
 });
@@ -401,10 +402,11 @@ router.get('/servicios.csv', (req, res) => {
     to,
   });
 
-  const lines = [['Fecha', 'Trabajador', 'Cliente', 'Pago', 'Importe', 'Nota', 'Liquidado']];
+  const lines = [['Fecha', 'Hora', 'Trabajador', 'Cliente', 'Pago', 'Importe', 'Nota', 'Liquidado']];
   for (const e of entries) {
     lines.push([
       formatDate(e.service_date),
+      e.service_time || '',
       e.worker_name,
       e.display_label,
       metodoLegible(e.payment_method),
@@ -448,6 +450,7 @@ router.get('/servicios/:id', (req, res) => {
       entry,
       workers: repo.listWorkers({ includeInactive: true }),
       today: todayISO(),
+      ahora: nowHM(),
     })
   );
 });
@@ -695,6 +698,7 @@ function readAdminEntryForm(body) {
     data: {
       amount_cents,
       service_date,
+      service_time: isValidTime(body.service_time) ? body.service_time : nowHM(),
       town_id: null,
       client_label: String(body.client_label || '').trim().slice(0, 80),
       payment_method: METHODS.includes(body.payment_method) ? body.payment_method : 'efectivo',

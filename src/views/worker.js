@@ -24,7 +24,7 @@ function metodoLegible(valor) {
  * Formulario de alta rápida: sólo el importe es obligatorio.
  * Todo lo demás viene ya rellenado con lo último que usó el trabajador.
  */
-function quickForm({ today, suggestions, action = '/servicios', entry = null }) {
+function quickForm({ today, ahora, suggestions, action = '/servicios', entry = null }) {
   const isEdit = Boolean(entry);
   const method = isEdit ? entry.payment_method : 'efectivo';
 
@@ -58,6 +58,12 @@ function quickForm({ today, suggestions, action = '/servicios', entry = null }) 
         <input id="service_date" name="service_date" type="date" value="${esc(isEdit ? entry.service_date : today)}" max="${esc(today)}">
       </div>
       <div class="field">
+        <label for="service_time">Hora</label>
+        <input id="service_time" name="service_time" type="time"
+               value="${esc(isEdit ? entry.service_time || ahora : ahora)}">
+        <div class="hint">Se pone sola con la hora de ahora.</div>
+      </div>
+      <div class="field">
         <label for="payment_method">Cómo ha pagado</label>
         <select id="payment_method" name="payment_method">
           ${PAYMENT_METHODS.map(
@@ -76,7 +82,7 @@ function quickForm({ today, suggestions, action = '/servicios', entry = null }) 
 </form>`;
 }
 
-function workerHome({ user, flash, warning, today, suggestions, todayEntries, todayCents, monthCents, monthCount, monthCommissionCents, month }) {
+function workerHome({ user, flash, warning, today, ahora, suggestions, todayEntries, todayCents, monthCents, monthCount, monthCommissionCents, month }) {
   const body = `
 ${stats([
   { k: 'Hoy', v: money(todayCents), sub: `${todayEntries.length} servicio(s)` },
@@ -87,7 +93,7 @@ ${stats([
 <div class="card" style="margin-top:16px">
   <h2>Apuntar un cobro</h2>
   <p class="sub">Con poner el importe ya vale. Lo demás es opcional.</p>
-  ${quickForm({ today, suggestions })}
+  ${quickForm({ today, ahora, suggestions })}
 </div>
 
 <div class="card">
@@ -108,9 +114,9 @@ function entryItem(e, { showWorker = false } = {}) {
   return `<div class="item">
   <div class="grow">
     <div class="title">${esc(e.display_label)}</div>
-    <div class="meta">${showWorker ? `${esc(e.worker_name)} · ` : ''}${esc(formatDateShort(e.service_date))} · ${esc(
-      metodoLegible(e.payment_method)
-    )}${e.notes ? ` · ${esc(e.notes)}` : ''}</div>
+    <div class="meta">${showWorker ? `${esc(e.worker_name)} · ` : ''}${esc(formatDateShort(e.service_date))}${
+      e.service_time ? ` · ${esc(e.service_time)}` : ''
+    } · ${esc(metodoLegible(e.payment_method))}${e.notes ? ` · ${esc(e.notes)}` : ''}</div>
   </div>
   <div class="money">${money(e.amount_cents)}</div>
   ${
@@ -240,11 +246,11 @@ ${stats([
   return layout({ title: 'Mis cuentas', user, body, active: 'cuentas', flash, warning });
 }
 
-function workerEditEntry({ user, flash, warning, entry, today }) {
+function workerEditEntry({ user, flash, warning, entry, today, ahora }) {
   const body = `
 <h1>Editar servicio</h1>
 <div class="card">
-  ${quickForm({ today, suggestions: [], action: `/servicios/${entry.id}`, entry })}
+  ${quickForm({ today, ahora, suggestions: [], action: `/servicios/${entry.id}`, entry })}
 </div>
 <div class="card">
   <h2>Borrar</h2>

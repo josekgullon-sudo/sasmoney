@@ -15,6 +15,29 @@ function todayISO(date = new Date()) {
   }).format(date);
 }
 
+/** Hora actual del negocio, en formato HH:MM. */
+function nowHM(date = new Date()) {
+  return new Intl.DateTimeFormat('es-ES', {
+    timeZone: TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
+}
+
+/** Hora del negocio a partir de una marca de tiempo guardada en UTC. */
+function hmFromStamp(utcString) {
+  const s = String(utcString || '').trim();
+  if (!s) return '';
+  const date = new Date(s.replace(' ', 'T') + (s.endsWith('Z') ? '' : 'Z'));
+  return Number.isNaN(date.getTime()) ? '' : nowHM(date);
+}
+
+/** Comprueba que una hora tenga la pinta de HH:MM. */
+function isValidTime(hm) {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(String(hm || ''));
+}
+
 /** Mes actual en formato YYYY-MM. */
 function currentMonth() {
   return todayISO().slice(0, 7);
@@ -106,6 +129,9 @@ module.exports = {
   TZ,
   BRAND,
   todayISO,
+  nowHM,
+  hmFromStamp,
+  isValidTime,
   currentMonth,
   monthRange,
   monthLabel,

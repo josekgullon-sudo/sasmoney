@@ -56,8 +56,8 @@ function getEntry(id) {
 function createEntry(data) {
   const info = db
     .prepare(
-      `INSERT INTO entries (user_id, service_date, amount_cents, client_label, town_id, payment_method, notes)
-       VALUES (@user_id, @service_date, @amount_cents, @client_label, @town_id, @payment_method, @notes)`
+      `INSERT INTO entries (user_id, service_date, service_time, amount_cents, client_label, town_id, payment_method, notes)
+       VALUES (@user_id, @service_date, @service_time, @amount_cents, @client_label, @town_id, @payment_method, @notes)`
     )
     .run(data);
   return Number(info.lastInsertRowid);
@@ -67,6 +67,7 @@ function updateEntry(id, data) {
   db.prepare(
     `UPDATE entries
         SET service_date = @service_date,
+            service_time = @service_time,
             amount_cents = @amount_cents,
             client_label = @client_label,
             town_id = @town_id,

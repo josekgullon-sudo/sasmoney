@@ -60,3 +60,19 @@ test('escapa el HTML que escriben los usuarios', () => {
   assert.equal(esc('Casa "La Paz" & Cía'), 'Casa &quot;La Paz&quot; &amp; Cía');
   assert.equal(esc(null), '');
 });
+
+test('la hora se calcula en la zona del negocio', () => {
+  const { nowHM, hmFromStamp, isValidTime } = require('../src/util');
+  // 13:30 UTC son las 15:30 en Madrid (verano).
+  assert.equal(nowHM(new Date('2026-08-01T13:30:00Z')), '15:30');
+  // En invierno la diferencia es de una hora.
+  assert.equal(nowHM(new Date('2026-01-15T13:30:00Z')), '14:30');
+  assert.equal(hmFromStamp('2026-08-01 13:30:00'), '15:30');
+  assert.equal(hmFromStamp(''), '');
+
+  assert.equal(isValidTime('09:15'), true);
+  assert.equal(isValidTime('23:59'), true);
+  assert.equal(isValidTime('24:00'), false);
+  assert.equal(isValidTime('9:15'), false);
+  assert.equal(isValidTime(''), false);
+});

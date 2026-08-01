@@ -4,7 +4,7 @@ const express = require('express');
 const { requireLogin } = require('../auth');
 const repo = require('../repo');
 const { calcCommission, parseAmountToCents, formatEuro } = require('../commission');
-const { todayISO, currentMonth, monthRange, recentMonths, isValidDate } = require('../util');
+const { todayISO, nowHM, isValidTime, currentMonth, monthRange, recentMonths, isValidDate } = require('../util');
 const views = require('../views/worker');
 const { PAYMENT_METHODS } = require('../views/worker');
 
@@ -12,7 +12,7 @@ const router = express.Router();
 const METHODS = PAYMENT_METHODS.map(([v]) => v);
 
 /** Lee y valida los campos del formulario de servicio. */
-function readEntryForm(body, { today }) {
+function readEntryForm(body, { today, ahora }) {
   const amount_cents = parseAmountToCents(body.amount);
   if (amount_cents === null) return { error: 'Escribe un importe válido, por ejemplo 45 o 45,50.' };
   if (amount_cents === 0) return { error: 'El importe no puede ser 0 €.' };
@@ -24,10 +24,14 @@ function readEntryForm(body, { today }) {
 
   const payment_method = METHODS.includes(body.payment_method) ? body.payment_method : 'efectivo';
 
+  // La hora se pone sola; si viene una escrita a mano y es válida, se respeta.
+  const service_time = isValidTime(body.service_time) ? body.service_time : ahora;
+
   return {
     data: {
       amount_cents,
       service_date,
+      service_time,
       town_id: null,
       client_label: String(body.client_label || '').trim().slice(0, 80),
       payment_method,
@@ -56,6 +60,7 @@ router.get('/', requireLogin, (req, res) => {
       flash: res.locals.flash,
       warning: res.locals.warning,
       today,
+      ahora: nowHM(),
       month,
       suggestions: repo.commonAmounts(req.user.id),
       todayEntries,
@@ -70,7 +75,7 @@ router.get('/', requireLogin, (req, res) => {
 router.post('/servicios', requireLogin, (req, res) => {
   if (req.user.role === 'admin') return res.redirect('/admin/servicios');
 
-  const { data, error } = readEntryForm(req.body, { today: todayISO() });
+  const { data, error } = readEntryForm(req.body, { today: todayISO(), ahora: nowHM() });
   if (error) {
     res.flash('error', error);
     return res.redirect('/');
@@ -96,6 +101,7 @@ router.get('/servicios/:id/editar', requireLogin, (req, res) => {
       warning: res.locals.warning,
       entry,
       today: todayISO(),
+      ahora: nowHM(),
     })
   );
 });
@@ -108,7 +114,7 @@ router.post('/servicios/:id', requireLogin, (req, res) => {
     return res.redirect('/mis-cuentas');
   }
 
-  const { data, error } = readEntryForm(req.body, { today: todayISO() });
+  const { data, error } = readEntryForm(req.body, { today: todayISO(), ahora: nowHM() });
   if (error) {
     res.flash('error', error);
     return res.redirect(`/servicios/${entry.id}/editar`);

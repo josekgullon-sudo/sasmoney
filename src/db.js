@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS entries (
   user_id       INTEGER NOT NULL REFERENCES users(id),
   service_date  TEXT    NOT NULL,                    -- YYYY-MM-DD
   amount_cents  INTEGER NOT NULL CHECK (amount_cents >= 0),
+  service_time  TEXT    NOT NULL DEFAULT '',         -- HH:MM, se pone sola al apuntar
   client_label  TEXT    NOT NULL DEFAULT '',         -- opcional: nombre o apodo del cliente
   town_id       INTEGER REFERENCES towns(id),
   payment_method TEXT   NOT NULL DEFAULT 'efectivo',
@@ -163,8 +164,18 @@ function migrate() {
     db.exec('ALTER TABLE expenses ADD COLUMN is_investment INTEGER NOT NULL DEFAULT 0');
   }
 
-  // El CHECK de 'kind' no admitía los gastos diarios y SQLite no deja cambiar un
-  // CHECK: hay que rehacer la tabla copiando lo que hubiera dentro.
+  const entryCols = db.prepare('PRAGMA table_info(entries)').all().map((c) => c.name);
+  if (!entryCols.includes('service_time')) {
+    db.exec("ALTER TABLE entries ADD COLUMN service_time TEXT NOT NULL DEFAULT ''");
+
+    // A los servicios que ya había se les pone la hora en la que se apuntaron,
+    // que es la que quedó guardada en created_at (en UTC, hay que pasarla).
+    const { hmFromStamp } = require('./util');
+    const viejos = db.prepare("SELECT id, created_at FROM entries WHERE service_time = ''").all();
+    const poner = db.prepare('UPDATE entries SET service_time = ? WHERE id = ?');
+    for (const e of viejos) poner.run(hmFromStamp(e.created_at), e.id);
+  }
+
   const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
   if (!userCols.includes('investment_share')) {
     // Qué porcentaje de la inversión carga cada trabajador cuando el reparto
@@ -172,6 +183,8 @@ function migrate() {
     db.exec('ALTER TABLE users ADD COLUMN investment_share REAL NOT NULL DEFAULT 0');
   }
 
+  // El CHECK de 'kind' no admitía los gastos diarios y SQLite no deja cambiar un
+  // CHECK: hay que rehacer la tabla copiando lo que hubiera dentro.
   const esquema = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='expenses'").get();
   if (esquema && !esquema.sql.includes("'daily'")) {
     db.exec(`

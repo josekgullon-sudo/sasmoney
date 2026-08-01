@@ -324,7 +324,9 @@ function settlementCard(r, { from, to, onlyPending }) {
           ${r.entries
             .map(
               (e) => `<tr>
-            <td class="small nowrap">${esc(formatDateShort(e.service_date))}</td>
+            <td class="small nowrap">${esc(formatDateShort(e.service_date))}${
+              e.service_time ? ` ${esc(e.service_time)}` : ''
+            }</td>
             <td>${esc(e.display_label)}</td>
             <td class="num">${money(e.amount_cents)}</td>
           </tr>`
@@ -516,7 +518,7 @@ ${
   });
 }
 
-function adminEntries({ user, flash, warning, entries, workers, filters, totalCents, today }) {
+function adminEntries({ user, flash, warning, entries, workers, filters, totalCents, today, ahora }) {
   const body = `
 <h1>Servicios</h1>
 
@@ -552,15 +554,17 @@ function adminEntries({ user, flash, warning, entries, workers, filters, totalCe
     entries.length === 0
       ? emptyState('No hay servicios con estos filtros.')
       : `<div class="table-wrap"><table>
-    <thead><tr><th>Fecha</th><th>Trabajador</th><th>Cliente</th><th>Pago</th><th class="num">Importe</th><th></th></tr></thead>
+    <thead><tr><th>Fecha</th><th>Trabajador</th><th>Cliente</th><th class="hide-narrow">Pago</th><th class="num">Importe</th><th></th></tr></thead>
     <tbody>
       ${entries
         .map(
           (e) => `<tr>
-        <td class="small nowrap">${esc(formatDateShort(e.service_date))}</td>
+        <td class="small nowrap">${esc(formatDateShort(e.service_date))}${
+          e.service_time ? `<div class="muted">${esc(e.service_time)}</div>` : ''
+        }</td>
         <td>${esc(e.worker_name)}</td>
         <td>${esc(e.display_label)}${e.notes ? `<div class="small muted">${esc(e.notes)}</div>` : ''}</td>
-        <td class="small muted">${esc(metodoLegible(e.payment_method))}</td>
+        <td class="small muted hide-narrow">${esc(metodoLegible(e.payment_method))}</td>
         <td class="num">${money(e.amount_cents)}</td>
         <td class="right">${
           e.settlement_id
@@ -598,6 +602,10 @@ function adminEntries({ user, flash, warning, entries, workers, filters, totalCe
         <label for="a_date">Fecha</label>
         <input id="a_date" name="service_date" type="date" value="${esc(today)}">
       </div>
+      <div class="field">
+        <label for="a_time">Hora</label>
+        <input id="a_time" name="service_time" type="time" value="${esc(ahora)}">
+      </div>
     </div>
     <div class="row">
       <div class="field">
@@ -618,7 +626,7 @@ function adminEntries({ user, flash, warning, entries, workers, filters, totalCe
   return layout({ title: 'Servicios', user, body, active: 'servicios', flash, warning });
 }
 
-function adminEntryForm({ user, flash, warning, entry, workers, today }) {
+function adminEntryForm({ user, flash, warning, entry, workers, today, ahora }) {
   const body = `
 <h1>Editar servicio</h1>
 <div class="card">
@@ -644,6 +652,10 @@ function adminEntryForm({ user, flash, warning, entry, workers, today }) {
       <div class="field">
         <label for="service_date">Fecha</label>
         <input id="service_date" name="service_date" type="date" value="${esc(entry.service_date)}" max="${esc(today)}">
+      </div>
+      <div class="field">
+        <label for="service_time">Hora</label>
+        <input id="service_time" name="service_time" type="time" value="${esc(entry.service_time || ahora)}">
       </div>
     </div>
     <div class="row">
