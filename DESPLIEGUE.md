@@ -202,18 +202,38 @@ sudo journalctl -u sasmoney -f      # ver qué está pasando (Ctrl+C para salir)
 
 ### Actualizarla
 
-Siempre con una copia recién descargada, **nunca** con la que hay en
-`/opt/sasmoney/app`: si el instalador que tienes instalado tuviera un fallo,
-no podría arreglarse a sí mismo.
+**No tienes que hacer nada: se actualiza sola cada noche a las 5:00.**
+
+Antes de tocar nada hace una copia de seguridad, se trae la versión nueva y comprueba
+que la aplicación responde. **Si no respondiera, vuelve sola a la versión anterior** y te
+la deja funcionando; nunca te quedas con la aplicación caída por una actualización.
+
+```bash
+sudo systemctl list-timers sasmoney-actualizar   # cuándo toca la siguiente
+sudo journalctl -u sasmoney-actualizar -n 30     # qué pasó en las últimas
+sudo /opt/sasmoney/actualizar.sh                 # actualizar ahora mismo
+```
+
+Si prefieres actualizar tú a mano y que no se toque nada por su cuenta:
+
+```bash
+sudo systemctl disable --now sasmoney-actualizar.timer
+```
+
+Y para volver a activarla:
+
+```bash
+sudo systemctl enable --now sasmoney-actualizar.timer
+```
+
+Como último recurso, el instalador también sirve para actualizar (siempre desde una
+copia recién descargada, nunca desde `/opt/sasmoney/app`):
 
 ```bash
 sudo rm -rf /tmp/sasmoney
 git clone -b claude/saas-clientes-pagos-muh221 https://github.com/josekgullon-sudo/sasmoney.git /tmp/sasmoney
 sudo bash /tmp/sasmoney/deploy/instalar.sh
 ```
-
-El mismo script sirve para instalar y para actualizar: se trae la última versión,
-**mantiene tu puerto, tu configuración y tus datos** y reinicia el servicio.
 
 ### Copias de seguridad
 

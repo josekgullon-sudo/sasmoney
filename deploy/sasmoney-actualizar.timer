@@ -1,0 +1,12 @@
+[Unit]
+Description=Buscar actualizaciones de SaaS TotalFlix cada noche
+
+[Timer]
+# A las 5:00, después de la copia de seguridad de las 4:30. Si el servidor
+# estaba apagado, se hace en cuanto vuelva a encenderse.
+OnCalendar=*-*-* 05:00:00
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target

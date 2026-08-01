@@ -204,11 +204,15 @@ say "Registrando el servicio para que arranque solo"
 install -m 644 "$APP_DIR/deploy/sasmoney.service" /etc/systemd/system/sasmoney.service
 install -m 644 "$APP_DIR/deploy/sasmoney-copia.service" /etc/systemd/system/sasmoney-copia.service
 install -m 644 "$APP_DIR/deploy/sasmoney-copia.timer" /etc/systemd/system/sasmoney-copia.timer
+install -m 644 "$APP_DIR/deploy/sasmoney-actualizar.service" /etc/systemd/system/sasmoney-actualizar.service
+install -m 644 "$APP_DIR/deploy/sasmoney-actualizar.timer" /etc/systemd/system/sasmoney-actualizar.timer
 install -m 755 "$APP_DIR/deploy/copia-seguridad.sh" "$BASE/copia-seguridad.sh"
+install -m 755 "$APP_DIR/deploy/actualizar.sh" "$BASE/actualizar.sh"
 
 systemctl daemon-reload
 systemctl enable --quiet sasmoney.service
 systemctl enable --quiet --now sasmoney-copia.timer
+systemctl enable --quiet --now sasmoney-actualizar.timer
 
 # Reiniciar, no sólo arrancar: "enable --now" no hace nada si ya estaba en
 # marcha, y entonces el proceso viejo seguiría con el código anterior.
@@ -222,6 +226,7 @@ if ! systemctl is-active --quiet sasmoney.service; then
 fi
 ok "Servicio reiniciado con la nueva versión y listo para arrancar solo"
 ok "Copia de seguridad automática todas las noches"
+ok "Se actualiza sola cada noche, y si algo fallara vuelve atrás ella misma"
 
 VERSION=$(gitapp log -1 --format='%h del %cd' --date=short 2>/dev/null || echo 'desconocida')
 ARRANCADO=$(systemctl show -p ActiveEnterTimestamp --value sasmoney.service 2>/dev/null || true)

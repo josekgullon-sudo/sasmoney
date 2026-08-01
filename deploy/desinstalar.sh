@@ -27,7 +27,8 @@ warn() { printf '    \033[0;33m!\033[0m %s\n' "$1"; }
 [ "$(id -u)" -eq 0 ] || { echo "Ejecútalo con sudo."; exit 1; }
 
 say "Parando el servicio"
-for unidad in sasmoney.service sasmoney-copia.timer sasmoney-copia.service; do
+for unidad in sasmoney.service sasmoney-copia.timer sasmoney-copia.service \
+              sasmoney-actualizar.timer sasmoney-actualizar.service; do
   if systemctl list-unit-files 2>/dev/null | grep -q "^$unidad" || [ -e "/etc/systemd/system/$unidad" ]; then
     systemctl disable --quiet --now "$unidad" 2>/dev/null || true
     ok "$unidad parada y desactivada"
@@ -37,7 +38,9 @@ done
 say "Quitando los ficheros del servicio"
 rm -f /etc/systemd/system/sasmoney.service \
       /etc/systemd/system/sasmoney-copia.service \
-      /etc/systemd/system/sasmoney-copia.timer
+      /etc/systemd/system/sasmoney-copia.timer \
+      /etc/systemd/system/sasmoney-actualizar.service \
+      /etc/systemd/system/sasmoney-actualizar.timer
 # Los fallos de systemd no deben cortar la desinstalación a medias: lo que
 # queda por hacer (borrar carpetas, usuario, nginx) hay que hacerlo igualmente.
 systemctl daemon-reload 2>/dev/null || true

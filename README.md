@@ -104,9 +104,9 @@ git clone -b claude/saas-clientes-pagos-muh221 https://github.com/josekgullon-su
 sudo bash /tmp/sasmoney/deploy/instalar.sh
 ```
 
-El mismo comando instala y actualiza. Lánzalo siempre desde una copia recién
-descargada en `/tmp`, no desde `/opt/sasmoney/app`: así el instalador nunca depende
-de la versión que ya hubiera instalada.
+Después de eso **se actualiza sola cada noche**: hace copia de seguridad, se trae la
+versión nueva y comprueba que responde; si no respondiera, vuelve sola a la anterior.
+Se puede desactivar con `sudo systemctl disable --now sasmoney-actualizar.timer`.
 
 A mano, en cualquier otro sitio (Railway, Render, Fly.io…):
 
