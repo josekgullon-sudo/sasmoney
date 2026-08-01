@@ -20,9 +20,10 @@ const { todayISO, monthRange } = require('./util');
  * ni preocuparse de que se acaben.
  */
 
-const KINDS = ['once', 'monthly', 'quarterly', 'yearly'];
+const KINDS = ['daily', 'once', 'monthly', 'quarterly', 'yearly'];
 
 const KIND_LABELS = {
+  daily: 'Todos los días',
   once: 'Una sola vez',
   monthly: 'Todos los meses',
   quarterly: 'Cada tres meses',
@@ -49,6 +50,8 @@ function addMonths(iso, months) {
 function nextDate(expense, desde = todayISO()) {
   const anchor = expense.anchor_date;
   if (expense.kind === 'once') return anchor >= desde ? anchor : null;
+  // Un gasto diario toca hoy mismo, salvo que aún no haya empezado.
+  if (expense.kind === 'daily') return anchor >= desde ? anchor : desde;
 
   const step = KIND_STEP[expense.kind];
   if (!step) return null;
@@ -70,13 +73,37 @@ function nextDate(expense, desde = todayISO()) {
 
 /** Fecha en la que ese gasto cae dentro del mes indicado ('YYYY-MM'), o null. */
 function dateInMonth(expense, month) {
+  const fechas = monthOccurrences(expense, month);
+  return fechas.length ? fechas[0] : null;
+}
+
+/**
+ * Todos los días de ese mes en los que toca pagar ese gasto.
+ * Casi siempre es uno solo; los diarios caen tantas veces como días tenga el mes
+ * (contando desde su fecha de inicio si empezó a mitad).
+ */
+function monthOccurrences(expense, month) {
   const { from, to } = monthRange(month);
-  if (expense.kind === 'once') {
-    return expense.anchor_date >= from && expense.anchor_date <= to ? expense.anchor_date : null;
+  const anchor = expense.anchor_date;
+
+  if (expense.kind === 'daily') {
+    if (anchor > to) return [];
+    const fechas = [];
+    let dia = anchor > from ? anchor : from;
+    while (dia <= to) {
+      fechas.push(dia);
+      dia = addDays(dia, 1);
+    }
+    return fechas;
   }
-  if (expense.anchor_date > to) return null;
+
+  if (expense.kind === 'once') {
+    return anchor >= from && anchor <= to ? [anchor] : [];
+  }
+
+  if (anchor > to) return [];
   const fecha = nextDate(expense, from);
-  return fecha && fecha <= to ? fecha : null;
+  return fecha && fecha <= to ? [fecha] : [];
 }
 
 const DIRECTIONS = ['out', 'in'];
@@ -94,19 +121,20 @@ function getExpense(id) {
 function createExpense(data) {
   const info = db
     .prepare(
-      `INSERT INTO expenses (name, amount_cents, kind, anchor_date, notes, direction)
-       VALUES (@name, @amount_cents, @kind, @anchor_date, @notes, @direction)`
+      `INSERT INTO expenses (name, amount_cents, kind, anchor_date, notes, direction, is_investment)
+       VALUES (@name, @amount_cents, @kind, @anchor_date, @notes, @direction, @is_investment)`
     )
-    .run({ direction: 'out', ...data });
+    .run({ direction: 'out', is_investment: 0, ...data });
   return Number(info.lastInsertRowid);
 }
 
 function updateExpense(id, data) {
   db.prepare(
     `UPDATE expenses SET name = @name, amount_cents = @amount_cents, kind = @kind,
-            anchor_date = @anchor_date, notes = @notes, active = @active
+            anchor_date = @anchor_date, notes = @notes, active = @active,
+            is_investment = @is_investment
       WHERE id = @id`
-  ).run({ ...data, id });
+  ).run({ is_investment: 0, ...data, id });
 }
 
 function deleteExpense(id) {
@@ -114,22 +142,41 @@ function deleteExpense(id) {
 }
 
 /**
- * Gastos que caen en un mes, con la fecha concreta de cada uno.
- * Los inactivos quedan fuera: son los que has puesto en pausa.
+ * Gastos que caen en un mes, ya con la cuenta hecha.
+ * Cada fila trae cuántas veces cae ('veces'), el total del mes y cuánto de eso
+ * aún está por llegar. Los inactivos quedan fuera: son los que has puesto en pausa.
  */
 function monthExpenses(month, direction = 'out') {
+  const hoy = todayISO();
   const rows = [];
+
   for (const e of listExpenses({ direction })) {
     if (!e.active) continue;
-    const fecha = dateInMonth(e, month);
-    if (fecha) rows.push({ ...e, fecha });
+    const fechas = monthOccurrences(e, month);
+    if (fechas.length === 0) continue;
+
+    rows.push({
+      ...e,
+      fecha: fechas[0],
+      veces: fechas.length,
+      total_cents: e.amount_cents * fechas.length,
+      pendiente_cents: e.amount_cents * fechas.filter((f) => f > hoy).length,
+    });
   }
+
   rows.sort((a, b) => a.fecha.localeCompare(b.fecha));
   return rows;
 }
 
 function monthExpensesTotal(month, direction = 'out') {
-  return monthExpenses(month, direction).reduce((a, e) => a + e.amount_cents, 0);
+  return monthExpenses(month, direction).reduce((a, e) => a + e.total_cents, 0);
+}
+
+/** Lo que cuesta al mes la publicidad y demás inversiones marcadas como tal. */
+function monthInvestmentTotal(month) {
+  return monthExpenses(month, 'out')
+    .filter((e) => e.is_investment)
+    .reduce((a, e) => a + e.total_cents, 0);
 }
 
 /** Los siguientes gastos que van a llegar, ordenados por fecha. */
@@ -160,6 +207,7 @@ module.exports = {
   addDays,
   nextDate,
   dateInMonth,
+  monthOccurrences,
   listExpenses,
   getExpense,
   createExpense,
@@ -167,5 +215,6 @@ module.exports = {
   deleteExpense,
   monthExpenses,
   monthExpensesTotal,
+  monthInvestmentTotal,
   upcoming,
 };

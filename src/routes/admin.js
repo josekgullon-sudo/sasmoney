@@ -61,13 +61,14 @@ router.get('/', (req, res) => {
       pendingTotalCents: rows.reduce((a, r) => a + r.pendingCommissionCents, 0),
       gastos: {
         delMes,
-        totalCents: delMes.reduce((a, g) => a + g.amount_cents, 0),
-        pendientesCents: delMes.filter((g) => g.fecha > hoy).reduce((a, g) => a + g.amount_cents, 0),
+        totalCents: delMes.reduce((a, g) => a + g.total_cents, 0),
+        pendientesCents: delMes.reduce((a, g) => a + g.pendiente_cents, 0),
+        inversionCents: delMes.filter((g) => g.is_investment).reduce((a, g) => a + g.total_cents, 0),
         proximo: proximos[0] || null,
       },
       ingresos: {
         delMes: ingresosMes,
-        totalCents: ingresosMes.reduce((a, g) => a + g.amount_cents, 0),
+        totalCents: ingresosMes.reduce((a, g) => a + g.total_cents, 0),
       },
     })
   );
@@ -176,6 +177,62 @@ router.get('/liquidacion.csv', (req, res) => {
     ]);
   }
   sendCsv(res, `liquidacion_${from}_${to}.csv`, lines);
+});
+
+/* ------------------------------------------------------------- Rentabilidad */
+
+router.get('/rentabilidad', (req, res) => {
+  const month = validMonth(req.query.month);
+  const { from, to } = monthRange(month);
+
+  const base = repo.settlementRows({ from, to, pendingOnly: false });
+  const totals = base.reduce(
+    (acc, r) => ({
+      count: acc.count + r.count,
+      totalCents: acc.totalCents + r.totalCents,
+      commissionCents: acc.commissionCents + r.calc.commissionCents,
+    }),
+    { count: 0, totalCents: 0, commissionCents: 0 }
+  );
+
+  const gastosMes = expenses.monthExpenses(month, 'out');
+  const inversionCents = gastosMes.filter((g) => g.is_investment).reduce((a, g) => a + g.total_cents, 0);
+  const otrosGastosCents = gastosMes.filter((g) => !g.is_investment).reduce((a, g) => a + g.total_cents, 0);
+  const ingresosCents = expenses.monthExpensesTotal(month, 'in');
+
+  // La inversión se reparte en proporción a lo facturado. El último reparto se
+  // ajusta con lo que quede para que la suma cuadre al céntimo con el total.
+  let repartido = 0;
+  const rows = base
+    .sort((a, b) => b.totalCents - a.totalCents)
+    .map((r, i, arr) => {
+      const esUltima = i === arr.length - 1;
+      const suya = esUltima
+        ? inversionCents - repartido
+        : totals.totalCents > 0
+          ? Math.round((inversionCents * r.totalCents) / totals.totalCents)
+          : 0;
+      repartido += suya;
+      return {
+        ...r,
+        inversionCents: suya,
+        beneficioCents: r.totalCents - r.calc.commissionCents - suya,
+      };
+    });
+
+  res.send(
+    views.adminProfit({
+      user: req.user,
+      flash: res.locals.flash,
+      warning: res.locals.warning,
+      month,
+      rows,
+      totals,
+      inversionCents,
+      otrosGastosCents,
+      ingresosCents,
+    })
+  );
 });
 
 /* ------------------------------------------------------------ Trabajadores */
@@ -473,7 +530,14 @@ function readExpenseForm(body) {
   if (!isValidDate(anchor_date)) return { error: 'La fecha no es válida.' };
 
   return {
-    data: { name, amount_cents, kind, anchor_date, notes: String(body.notes || '').trim().slice(0, 200) },
+    data: {
+      name,
+      amount_cents,
+      kind,
+      anchor_date,
+      notes: String(body.notes || '').trim().slice(0, 200),
+      is_investment: body.is_investment ? 1 : 0,
+    },
   };
 }
 
@@ -493,9 +557,11 @@ function montarMovimientos(direction) {
     const proximos = expenses.upcoming({ dias: 92, direction });
 
     // A cada apunte se le calcula cuándo toca el siguiente.
+    const porId = new Map(delMes.map((g) => [g.id, g]));
     const todos = expenses.listExpenses({ direction }).map((g) => ({
       ...g,
       proximo: g.active ? expenses.nextDate(g) : null,
+      esteMes: porId.get(g.id) || null,
     }));
 
     // Sólo se abre para editar si es de esta pantalla: un gasto no se edita
@@ -512,7 +578,7 @@ function montarMovimientos(direction) {
         direction,
         expenses: todos,
         delMes,
-        totalMesCents: delMes.reduce((a, g) => a + g.amount_cents, 0),
+        totalMesCents: delMes.reduce((a, g) => a + g.total_cents, 0),
         proximos,
         editando: editar,
         hoy: todayISO(),

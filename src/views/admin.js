@@ -699,6 +699,17 @@ ${stats([
       <input id="g_notes" name="notes" value="${esc(e ? e.notes : '')}" placeholder="Opcional">
     </div>
     ${
+      esIngreso
+        ? ''
+        : `<div class="field">
+      <label style="display:flex;align-items:center;gap:9px;font-weight:500;color:var(--ink)">
+        <input type="checkbox" name="is_investment" value="1" ${e && e.is_investment ? 'checked' : ''} style="width:auto">
+        Es inversión (publicidad y similares)
+      </label>
+      <div class="hint">Marcado, se reparte entre las trabajadoras en la pantalla de Rentabilidad.</div>
+    </div>`
+    }
+    ${
       e
         ? `<div class="field">
       <label style="display:flex;align-items:center;gap:9px;font-weight:500;color:var(--ink)">
@@ -722,14 +733,14 @@ ${stats([
     proximos.length === 0
       ? emptyState(T.nada)
       : `<div class="table-wrap"><table>
-    <thead><tr><th>Fecha</th><th>Concepto</th><th>Repetición</th><th class="num">Importe</th></tr></thead>
+    <thead><tr><th>Fecha</th><th>Concepto</th><th class="hide-narrow">Repetición</th><th class="num">Importe</th></tr></thead>
     <tbody>
       ${proximos
         .map(
           (g) => `<tr>
         <td class="nowrap">${esc(formatDate(g.fecha))}${g.fecha === hoy ? ' <span class="pill warn">hoy</span>' : ''}</td>
-        <td>${esc(g.name)}</td>
-        <td class="small muted">${esc(KIND_LABELS[g.kind])}</td>
+        <td>${esc(g.name)}${g.is_investment ? ' <span class="pill">Inversión</span>' : ''}</td>
+        <td class="small muted hide-narrow">${esc(KIND_LABELS[g.kind])}</td>
         <td class="num">${money(g.amount_cents)}</td>
       </tr>`
         )
@@ -745,16 +756,22 @@ ${stats([
     expenses.length === 0
       ? emptyState(T.vacio)
       : `<div class="table-wrap"><table>
-    <thead><tr><th>Concepto</th><th>Repetición</th><th>Próximo</th><th class="num">Importe</th><th></th></tr></thead>
+    <thead><tr><th>Concepto</th><th class="hide-narrow">Repetición</th><th class="hide-narrow">Próximo</th><th class="num">Importe</th><th class="num">Este mes</th><th></th></tr></thead>
     <tbody>
       ${expenses
         .map(
           (g) => `<tr>
         <td>${esc(g.name)} ${g.active ? '' : '<span class="pill grey">En pausa</span>'}
+            ${g.is_investment ? '<span class="pill">Inversión</span>' : ''}
             ${g.notes ? `<div class="small muted">${esc(g.notes)}</div>` : ''}</td>
-        <td class="small muted">${esc(KIND_LABELS[g.kind])}</td>
-        <td class="small nowrap">${g.proximo ? esc(formatDate(g.proximo)) : '<span class="muted">—</span>'}</td>
-        <td class="num">${money(g.amount_cents)}</td>
+        <td class="small muted hide-narrow">${esc(KIND_LABELS[g.kind])}</td>
+        <td class="small nowrap hide-narrow">${g.proximo ? esc(formatDate(g.proximo)) : '<span class="muted">—</span>'}</td>
+        <td class="num">${money(g.amount_cents)}${
+          g.kind === 'daily' ? '<div class="small muted">al día</div>' : ''
+        }</td>
+        <td class="num">${
+          g.esteMes ? `${money(g.esteMes.total_cents)}${g.esteMes.veces > 1 ? `<div class="small muted">${g.esteMes.veces} veces</div>` : ''}` : '<span class="muted">—</span>'
+        }</td>
         <td class="right nowrap">
           <a class="btn ghost small" href="${T.ruta}?editar=${g.id}">Editar</a>
           <form method="post" action="${T.ruta}/${g.id}/borrar" class="inline">
@@ -770,6 +787,134 @@ ${stats([
 </div>`;
 
   return layout({ title: T.titulo, user, body, active: T.pestana, flash, warning });
+}
+
+
+/**
+ * Rentabilidad por trabajador.
+ *
+ * La inversión (publicidad y demás gastos marcados como tal) se reparte entre
+ * las trabajadoras en proporción a lo que ha facturado cada una: quien más
+ * factura, más parte de la publicidad se le atribuye. Es el reparto más honesto
+ * cuando la publicidad es común y no se puede saber a quién trajo cada cliente.
+ */
+function adminProfit({ user, flash, warning, month, rows, totals, inversionCents, otrosGastosCents, ingresosCents }) {
+  const pct = (parte, todo) => (todo > 0 ? (parte / todo) * 100 : 0);
+  const fmtPct = (n) => `${n.toFixed(1).replace('.', ',')} %`;
+  const retorno = (facturado, invertido) =>
+    invertido > 0 ? `${(facturado / invertido).toFixed(2).replace('.', ',')} €` : '—';
+
+  const body = `
+<h1>Rentabilidad de ${esc(monthLabel(month))}</h1>
+<p class="sub">Qué deja cada trabajadora una vez pagada su comisión y su parte de la publicidad.</p>
+${monthForm('/admin/rentabilidad', month)}
+
+${stats([
+  { k: 'Facturado', v: money(totals.totalCents), sub: `${totals.count} servicio(s)` },
+  { k: 'Inversión', v: money(inversionCents), sub: 'publicidad y similares' },
+  {
+    k: 'Beneficio',
+    v: money(totals.totalCents - totals.commissionCents - inversionCents),
+    sub: 'tras comisiones e inversión',
+    accent: true,
+  },
+  {
+    k: 'Retorno',
+    v: retorno(totals.totalCents, inversionCents),
+    sub: 'facturado por cada € invertido',
+  },
+])}
+
+<div class="card" style="margin-top:16px">
+  <h2>Por trabajador</h2>
+  <p class="sub">La inversión se reparte según lo que ha facturado cada una.</p>
+  ${
+    rows.length === 0
+      ? emptyState('Nadie ha facturado nada este mes.')
+      : `<div class="table-wrap"><table>
+    <thead><tr>
+      <th>Trabajador</th>
+      <th class="num">Facturado</th>
+      <th class="num hide-narrow">% del total</th>
+      <th class="num hide-narrow">Comisión</th>
+      <th class="num">Su inversión</th>
+      <th class="num">Deja</th>
+      <th class="num hide-narrow">Margen</th>
+      <th class="num hide-narrow">Retorno</th>
+    </tr></thead>
+    <tbody>
+      ${rows
+        .map(
+          (r) => `<tr>
+        <td class="nowrap">${esc(r.user.name)}</td>
+        <td class="num">${money(r.totalCents)}</td>
+        <td class="num hide-narrow muted">${esc(fmtPct(pct(r.totalCents, totals.totalCents)))}</td>
+        <td class="num hide-narrow">${money(r.calc.commissionCents)}</td>
+        <td class="num">${money(r.inversionCents)}</td>
+        <td class="num"><strong style="color:${r.beneficioCents < 0 ? 'var(--danger)' : 'inherit'}">${money(
+            r.beneficioCents
+          )}</strong></td>
+        <td class="num hide-narrow ${r.beneficioCents < 0 ? '' : 'muted'}">${esc(
+          fmtPct(pct(r.beneficioCents, r.totalCents))
+        )}</td>
+        <td class="num hide-narrow muted">${esc(retorno(r.totalCents, r.inversionCents))}</td>
+      </tr>`
+        )
+        .join('')}
+    </tbody>
+    <tfoot><tr>
+      <td>Total</td>
+      <td class="num">${money(totals.totalCents)}</td>
+      <td class="num hide-narrow"></td>
+      <td class="num hide-narrow">${money(totals.commissionCents)}</td>
+      <td class="num">${money(inversionCents)}</td>
+      <td class="num">${money(totals.totalCents - totals.commissionCents - inversionCents)}</td>
+      <td class="num hide-narrow"></td><td class="num hide-narrow"></td>
+    </tr></tfoot>
+  </table></div>`
+  }
+  <details class="box">
+    <summary>Cómo se calcula</summary>
+    <p class="small">
+      <strong>Su inversión</strong>: de los ${money(inversionCents)} de publicidad del mes, a cada una le
+      toca la misma proporción que ha facturado. Si una hace el 60 % de la facturación, carga con el 60 %
+      de la publicidad.
+    </p>
+    <p class="small"><strong>Deja</strong> = lo que factura − su comisión − su parte de la inversión.</p>
+    <p class="small"><strong>Retorno</strong>: euros facturados por cada euro invertido en ella. Cuanto más alto, mejor.</p>
+    <p class="small muted">
+      Los demás gastos de la empresa (${money(otrosGastosCents)} este mes) no se reparten: no dependen de
+      quién trabaje, así que se descuentan enteros en el Resumen.
+    </p>
+  </details>
+</div>
+
+<div class="card">
+  <h2>De la caja del mes</h2>
+  <div class="table-wrap">
+    <table>
+      <tbody>
+        <tr><td>Facturado</td><td class="num">${money(totals.totalCents)}</td></tr>
+        <tr><td>− Comisiones</td><td class="num">−${money(totals.commissionCents)}</td></tr>
+        <tr><td>− Inversión (publicidad)</td><td class="num">−${money(inversionCents)}</td></tr>
+        <tr><td>− Resto de gastos</td><td class="num">−${money(otrosGastosCents)}</td></tr>
+        ${
+          ingresosCents > 0
+            ? `<tr><td>+ Otros ingresos</td><td class="num">+${money(ingresosCents)}</td></tr>`
+            : ''
+        }
+        <tr><td><strong>Queda para la empresa</strong></td><td class="num"><strong>${money(
+          totals.totalCents - totals.commissionCents - inversionCents - otrosGastosCents + ingresosCents
+        )}</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="sub" style="margin-top:12px">
+    La inversión sale del ${esc(fmtPct(pct(inversionCents, totals.totalCents + ingresosCents)))} de todo lo que entra.
+  </p>
+</div>`;
+
+  return layout({ title: 'Rentabilidad', user, body, active: 'rentabilidad', flash, warning });
 }
 
 function monthForm(action, month) {
@@ -790,6 +935,7 @@ function monthForm(action, month) {
 
 module.exports = {
   adminHome,
+  adminProfit,
   adminExpenses,
   adminSettlement,
   adminWorkers,

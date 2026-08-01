@@ -33,8 +33,12 @@ Pensada para usarse desde el móvil: apuntar un cobro son dos toques.
 - **Trabajadores**: das de alta a cada una, le pones su usuario y su contraseña, y decides
   cuánto se lleva.
 - **Servicios**: todos los cobros, con filtros y descarga en CSV (se abre con Excel).
-- **Gastos**: lo que paga la empresa, sueltos o recurrentes. Los recurrentes se repiten
-  solos y el Resumen los descuenta para decirte lo que queda de verdad a fin de mes.
+- **Rentabilidad**: qué deja cada trabajadora una vez pagada su comisión y su parte de la
+  publicidad, con el margen y el retorno por euro invertido.
+- **Gastos**: lo que paga la empresa, sueltos o recurrentes (**diarios**, mensuales,
+  trimestrales o anuales). Los recurrentes se repiten solos y el Resumen los descuenta
+  para decirte lo que queda de verdad a fin de mes. Un gasto se puede marcar como
+  **inversión** (publicidad y similares) para que entre en la rentabilidad.
 - **Ingresos**: dinero que entra por otro lado, aparte de lo que facturan las trabajadoras
   (una venta suelta, una subvención, un alquiler...). También pueden repetirse solos y se
   suman a la caja del mes.
@@ -159,6 +163,13 @@ docker run -p 4400:4400 -v sasmoney-data:/data \
   y las siguientes se calculan, así que nunca se acaban ni hay que renovarlos.
 - **La caja del mes** es lo facturado, menos las comisiones, más los otros ingresos, menos
   los gastos.
+- **Un gasto diario cuenta tantas veces como días tenga el mes**: 20 €/día son 620 € en un
+  mes de 31 días y 560 € en febrero. Si empieza a mitad de mes, sólo cuentan los días desde
+  esa fecha.
+- **La inversión se reparte en proporción a lo facturado.** Quien hace el 60 % de la
+  facturación carga con el 60 % de la publicidad; el último reparto se ajusta con lo que
+  quede para que la suma cuadre al céntimo. Los demás gastos no se reparten, porque no
+  dependen de quién trabaje.
 - **Cada trabajadora sólo ve lo suyo.** El acceso a la parte del jefe está cerrado por rol.
 - **Las contraseñas no se pueden probar a lo bruto**: tras 8 fallos seguidos, esa
   combinación de usuario y origen queda bloqueada 15 minutos.

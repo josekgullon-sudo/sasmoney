@@ -42,6 +42,7 @@ function nav(user, active) {
       ? [
           ['/admin', 'Resumen', 'resumen'],
           ['/admin/liquidacion', 'Liquidación', 'liquidacion'],
+          ['/admin/rentabilidad', 'Rentabilidad', 'rentabilidad'],
           ['/admin/trabajadores', 'Trabajadores', 'trabajadores'],
           ['/admin/servicios', 'Servicios', 'servicios'],
           ['/admin/gastos', 'Gastos', 'gastos'],

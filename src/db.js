@@ -114,7 +114,7 @@ CREATE TABLE IF NOT EXISTS expenses (
   name         TEXT    NOT NULL,
   amount_cents INTEGER NOT NULL CHECK (amount_cents >= 0),
   -- 'once' = un pago suelto; el resto se repiten solos.
-  kind         TEXT    NOT NULL CHECK (kind IN ('once','monthly','quarterly','yearly')),
+  kind         TEXT    NOT NULL CHECK (kind IN ('daily','once','monthly','quarterly','yearly')),
   -- Fecha del pago suelto, o fecha del primero si se repite.
   anchor_date  TEXT    NOT NULL,
   active       INTEGER NOT NULL DEFAULT 1,
@@ -146,6 +146,40 @@ function migrate() {
   if (!cols.includes('direction')) {
     // 'out' = gasto, 'in' = dinero que entra por otro lado. Lo que ya había son gastos.
     db.exec("ALTER TABLE expenses ADD COLUMN direction TEXT NOT NULL DEFAULT 'out'");
+  }
+  if (!cols.includes('is_investment')) {
+    // Marca los gastos que son inversión (publicidad y similares) para poder
+    // repartirlos entre las trabajadoras y medir la rentabilidad.
+    db.exec('ALTER TABLE expenses ADD COLUMN is_investment INTEGER NOT NULL DEFAULT 0');
+  }
+
+  // El CHECK de 'kind' no admitía los gastos diarios y SQLite no deja cambiar un
+  // CHECK: hay que rehacer la tabla copiando lo que hubiera dentro.
+  const esquema = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='expenses'").get();
+  if (esquema && !esquema.sql.includes("'daily'")) {
+    db.exec(`
+      BEGIN;
+      CREATE TABLE expenses_nueva (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        name         TEXT    NOT NULL,
+        amount_cents INTEGER NOT NULL CHECK (amount_cents >= 0),
+        kind         TEXT    NOT NULL CHECK (kind IN ('daily','once','monthly','quarterly','yearly')),
+        anchor_date  TEXT    NOT NULL,
+        active       INTEGER NOT NULL DEFAULT 1,
+        notes        TEXT    NOT NULL DEFAULT '',
+        created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+        direction    TEXT    NOT NULL DEFAULT 'out',
+        is_investment INTEGER NOT NULL DEFAULT 0
+      );
+      INSERT INTO expenses_nueva
+        (id, name, amount_cents, kind, anchor_date, active, notes, created_at, direction, is_investment)
+        SELECT id, name, amount_cents, kind, anchor_date, active, notes, created_at, direction, is_investment
+          FROM expenses;
+      DROP TABLE expenses;
+      ALTER TABLE expenses_nueva RENAME TO expenses;
+      CREATE INDEX IF NOT EXISTS idx_expenses_active ON expenses(active, anchor_date);
+      COMMIT;
+    `);
   }
 }
 
