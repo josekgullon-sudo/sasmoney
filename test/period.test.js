@@ -103,6 +103,36 @@ test('el periodo viaja en la dirección sin perderse', () => {
   assert.deepEqual(pick(vuelta), pick(ida));
 });
 
+test('el periodo se explica sin que quepa duda de qué se está mirando', () => {
+  const { periodExplained } = require('../src/period');
+  const di = (q) => periodExplained(resolvePeriod(q, HOY));
+
+  // Un mes en marcha: se dice cuántos días llevas, para que no parezca el día suelto.
+  assert.equal(
+    di({ month: '2026-08' }),
+    'Van 2 de los 31 días de agosto 2026. Todo lo que ves es lo acumulado desde el sáb, 1 ago,' +
+      ' no la previsión de todo el periodo.'
+  );
+  assert.equal(di({ p: 'hoy' }), 'Sólo el dom, 2 ago.');
+  assert.equal(di({ month: '2026-07' }), 'julio 2026 entero, del mié, 1 jul al vie, 31 jul.');
+  assert.match(di({ from: '2026-08-01', to: '2026-08-15' }), /^Van 2 de los 15 días del sáb, 1 ago/);
+  assert.match(di({ month: '2026-09' }), /todavía no ha empezado/);
+});
+
+test('cuenta bien los días de cada periodo', () => {
+  const agosto = resolvePeriod({ month: '2026-08' }, HOY);
+  assert.equal(agosto.dias, 31);
+  assert.equal(agosto.diasHastaHoy, 2);
+
+  const semana = resolvePeriod({ p: '7dias' }, HOY);
+  assert.equal(semana.dias, 7);
+  assert.equal(semana.diasHastaHoy, 7); // acaba hoy: ya han pasado los siete
+
+  const futuro = resolvePeriod({ month: '2026-09' }, HOY);
+  assert.equal(futuro.dias, 30);
+  assert.equal(futuro.diasHastaHoy, 0);
+});
+
 function pick(p) {
   return [p.from, p.to];
 }

@@ -73,6 +73,15 @@ function addDays(iso, days) {
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
+/** Días que hay de una fecha a otra, contando las dos: del 1 al 2 son 2 días. */
+function daysBetween(from, to) {
+  if (!from || !to || to < from) return 0;
+  const [y1, m1, d1] = String(from).split('-').map(Number);
+  const [y2, m2, d2] = String(to).split('-').map(Number);
+  const ms = Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1);
+  return Math.round(ms / 86400000) + 1;
+}
+
 /** Mes anterior a uno dado: '2026-01' → '2025-12'. */
 function previousMonth(month) {
   const [y, m] = String(month).split('-').map(Number);
@@ -166,6 +175,7 @@ module.exports = {
   monthCutoff,
   monthInProgress,
   addDays,
+  daysBetween,
   previousMonth,
   monthLabel,
   recentMonths,

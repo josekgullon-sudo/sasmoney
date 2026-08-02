@@ -1,7 +1,7 @@
 'use strict';
 
 const { esc, formatDate, formatDateShort, formatStamp } = require('../util');
-const { periodQuery, rangeLabel } = require('../period');
+const { periodQuery, rangeLabel, periodExplained } = require('../period');
 const { ruleLabel, parseTiers } = require('../commission');
 const { layout } = require('./layout');
 const { stats, money, emptyState, periodPicker } = require('./common');
@@ -39,31 +39,20 @@ function adminHome({
 
   const body = `
 <h1>Resumen · ${esc(primeraMayuscula(periodo.label))}</h1>
-<p class="sub">${
-    periodo.esUnDia
-      ? `Lo de ${esc(periodo.label)}, ${esc(formatDate(periodo.from))}.`
-      : corte
-        ? `${esc(primeraMayuscula(rangeLabel(periodo.from, corte)))}. Las cifras son
-           <strong>lo que llevas hasta hoy</strong>, no el periodo entero.`
-        : 'Este periodo todavía no ha empezado.'
-  }</p>
+<p class="sub">${esc(periodExplained(periodo))}</p>
 ${periodPicker('/admin', periodo)}
 
 ${stats([
   { k: 'Entra', v: money(totals.totalCents + ingresos.hastaHoyCents), sub: `${totals.count} servicio(s)` },
   { k: 'Se llevan ellas', v: money(totals.commissionCents), sub: 'comisiones' },
-  {
-    k: 'Gastos hasta hoy',
-    v: money(gastos.hastaHoyCents),
-    sub: `${money(inversion.hastaHoyCents)} de marketing`,
-  },
-  { k: 'Me queda hoy', v: money(quedaHoyCents), sub: 'para la empresa', accent: true },
+  { k: 'Gastos', v: money(gastos.hastaHoyCents), sub: `${money(inversion.hastaHoyCents)} de marketing` },
+  { k: 'Me queda', v: money(quedaHoyCents), sub: 'para la empresa', accent: true },
 ])}
 
 <div class="card" style="margin-top:16px">
   <h2>Cada trabajador</h2>
-  <p class="sub">Lo que factura, lo que se lleva, el marketing que carga y lo que deja
-     ${esc(rangeLabel(periodo.from, corte))}.</p>
+  <p class="sub">Lo que factura, lo que se lleva, el marketing que carga y lo que deja,
+     acumulado ${esc(rangeLabel(periodo.from, corte))}.</p>
   ${
     rows.length === 0
       ? emptyState('Nadie ha apuntado nada en este periodo.')
@@ -181,8 +170,8 @@ ${stats([
     <table>
       <thead><tr>
         <th></th>
-        <th class="num">Hasta hoy</th>
-        ${enCurso ? '<th class="num hide-narrow">Si acabara el periodo</th>' : ''}
+        <th class="num">Lo que llevas</th>
+        ${enCurso ? '<th class="num hide-narrow">Al acabar</th>' : ''}
       </tr></thead>
       <tbody>
         ${filaMes('Facturado por todos', totals.totalCents, totals.totalCents, enCurso)}

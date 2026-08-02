@@ -1,6 +1,7 @@
 'use strict';
 
-const { esc, formatDate, formatDateShort, monthLabel, recentMonths } = require('../util');
+const { esc, formatDate, formatDateShort, monthLabel } = require('../util');
+const { periodExplained } = require('../period');
 const { ruleLabel } = require('../commission');
 const { layout } = require('./layout');
 const { stats, money, emptyState, periodPicker } = require('./common');
@@ -152,6 +153,7 @@ function workerAccount({
 
   const body = `
 <h1>Mis cuentas · ${esc(primeraMayuscula(periodo.label))}</h1>
+<p class="sub">${esc(periodExplained(periodo))}</p>
 ${periodPicker('/mis-cuentas', periodo)}
 
 ${stats([

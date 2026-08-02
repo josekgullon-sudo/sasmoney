@@ -55,6 +55,10 @@ tiempo que tú elijas**, no sólo un mes:
 El periodo elegido te acompaña al saltar de una pantalla a otra, y va en la dirección web, así
 que puedes guardar en favoritos "los últimos 7 días" o "el 14 de julio" y volver cuando quieras.
 
+Debajo del título siempre pone en una frase qué estás mirando exactamente — *"Van 2 de los 31
+días de agosto 2026: todo lo que ves es lo acumulado desde el día 1"* — para que no haya duda
+entre "el mes hasta hoy" y "sólo hoy".
+
 ## Las tres formas de pagar a una trabajadora
 
 Cada trabajadora tiene su propia regla y la cambias cuando quieras:

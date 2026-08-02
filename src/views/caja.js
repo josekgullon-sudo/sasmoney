@@ -1,7 +1,7 @@
 'use strict';
 
 const { esc, formatDate, formatDateShort } = require('../util');
-const { periodQuery, rangeLabel } = require('../period');
+const { periodQuery, rangeLabel, periodExplained } = require('../period');
 const { KINDS, KIND_LABELS } = require('../expenses');
 const { layout } = require('./layout');
 const { stats, money, emptyState, periodPicker } = require('./common');
@@ -39,7 +39,7 @@ function adminCaja({
   const body = `
 <h1>Caja · ${esc(primeraMayuscula(periodo.label))}</h1>
 <p class="sub">El dinero que entra y sale por fuera de los servicios.
-   Las cifras de arriba cuentan <strong>${esc(hasta)}</strong>.</p>
+   ${esc(periodExplained(periodo))}</p>
 ${periodPicker('/admin/caja', periodo, { editar: e ? e.id : '' })}
 
 ${stats([
@@ -47,7 +47,7 @@ ${stats([
   {
     k: 'Sale',
     v: money(totales.gastosCents),
-    sub: enCurso ? `${money(totales.gastosMesCents)} al acabar` : `${gastos.delMes.length} gasto(s)`,
+    sub: enCurso ? `${money(totales.gastosMesCents)} al acabar` : `${gastos.delMes.length} apunte(s)`,
   },
   {
     k: 'De eso, marketing',

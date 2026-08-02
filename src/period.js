@@ -7,6 +7,7 @@ const {
   monthLabel,
   currentMonth,
   previousMonth,
+  daysBetween,
   formatDate,
   formatDateShort,
   isValidDate,
@@ -87,18 +88,38 @@ function resolvePeriod(query = {}, hoy = todayISO()) {
 function completar(base, hoy) {
   const { from, to } = base;
   const month = base.month || mesExacto(from, to);
+  // Hasta qué día hay algo que contar: hoy si el periodo está en marcha, su
+  // último día si ya pasó, y '' si todavía no ha empezado.
+  const corte = hoy < from ? '' : hoy < to ? hoy : to;
   return {
     from,
     to,
     month,
+    corte,
     atajo: base.atajo || '',
     esUnDia: from === to,
-    // Hasta qué día hay algo que contar: hoy si el periodo está en marcha, su
-    // último día si ya pasó, y '' si todavía no ha empezado.
-    corte: hoy < from ? '' : hoy < to ? hoy : to,
     enCurso: hoy < to,
+    dias: daysBetween(from, to),
+    diasHastaHoy: corte ? daysBetween(from, corte) : 0,
     label: periodLabel({ from, to, month }, hoy),
   };
+}
+
+/**
+ * El periodo explicado en una frase, para que no haya duda de qué se está
+ * mirando. Es lo que evita el "está filtrado por mes, ¿por qué salen datos
+ * del día?": lo que sale es el mes, pero sólo los días que ya han pasado.
+ */
+function periodExplained(periodo) {
+  const { from, to, month, corte, enCurso, esUnDia, label, dias, diasHastaHoy } = periodo;
+  if (!corte) return 'Este periodo todavía no ha empezado: aún no hay nada que contar.';
+  if (esUnDia) return `Sólo el ${formatDateShort(from)}.`;
+  if (!enCurso) return `${label} entero, ${rangeLabel(from, to)}.`;
+  return (
+    `Van ${diasHastaHoy} de los ${dias} días ${month ? `de ${label}` : rangeLabel(from, to)}. ` +
+    `Todo lo que ves es lo acumulado desde el ${formatDateShort(from)}, no la previsión ` +
+    'de todo el periodo.'
+  );
 }
 
 /** Cómo se lee el periodo: 'hoy', '2 de agosto', 'agosto 2026', 'del 1 al 15 de agosto'. */
@@ -158,6 +179,7 @@ module.exports = {
   resolvePeriod,
   atajoActivo,
   periodLabel,
+  periodExplained,
   rangeLabel,
   periodQuery,
   validMonth,
