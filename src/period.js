@@ -106,20 +106,52 @@ function completar(base, hoy) {
 }
 
 /**
+ * Con un periodo aún en marcha hay dos maneras legítimas de mirarlo, y las dos
+ * hacen falta:
+ *
+ *   'completo'  — el periodo entero, con los gastos que todavía no han caído.
+ *                 Es lo que quieres para saber cuánto va a costar el mes.
+ *   'hastahoy'  — sólo los días que ya han pasado. Es lo que llevas de verdad.
+ *
+ * En un periodo ya cerrado las dos dan lo mismo, así que el interruptor sólo
+ * aparece mientras quedan días por delante.
+ */
+const VISTAS = ['completo', 'hastahoy'];
+
+function readVista(query = {}) {
+  const v = String(query.vista || '');
+  return VISTAS.includes(v) ? v : 'completo';
+}
+
+/**
  * El periodo explicado en una frase, para que no haya duda de qué se está
  * mirando. Es lo que evita el "está filtrado por mes, ¿por qué salen datos
- * del día?": lo que sale es el mes, pero sólo los días que ya han pasado.
+ * del día?".
  */
-function periodExplained(periodo) {
+function periodExplained(periodo, vista = 'completo') {
   const { from, to, month, corte, enCurso, esUnDia, label, dias, diasHastaHoy } = periodo;
   if (!corte) return 'Este periodo todavía no ha empezado: aún no hay nada que contar.';
   if (esUnDia) return `Sólo el ${formatDateShort(from)}.`;
   if (!enCurso) return `${label} entero, ${rangeLabel(from, to)}.`;
+
+  const cual = month ? `de ${label}` : rangeLabel(from, to);
+  if (vista === 'completo') {
+    return (
+      `${primeraLetra(label)} entero, los ${dias} días. Los gastos incluyen los que aún ` +
+      `faltan por caer; lo facturado, en cambio, sólo puede ser lo que llevas ` +
+      `(${diasHastaHoy} ${diasHastaHoy === 1 ? 'día' : 'días'}).`
+    );
+  }
   return (
-    `Van ${diasHastaHoy} de los ${dias} días ${month ? `de ${label}` : rangeLabel(from, to)}. ` +
+    `Van ${diasHastaHoy} de los ${dias} días ${cual}. ` +
     `Todo lo que ves es lo acumulado desde el ${formatDateShort(from)}, no la previsión ` +
     'de todo el periodo.'
   );
+}
+
+function primeraLetra(texto) {
+  const s = String(texto || '');
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 /** Cómo se lee el periodo: 'hoy', '2 de agosto', 'agosto 2026', 'del 1 al 15 de agosto'. */
@@ -180,6 +212,8 @@ module.exports = {
   atajoActivo,
   periodLabel,
   periodExplained,
+  VISTAS,
+  readVista,
   rangeLabel,
   periodQuery,
   validMonth,

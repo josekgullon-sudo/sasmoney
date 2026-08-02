@@ -1,7 +1,7 @@
 'use strict';
 
 const { db } = require('./db');
-const { todayISO, monthRange, addDays } = require('./util');
+const { todayISO, monthRange, addDays, daysBetween } = require('./util');
 
 /**
  * Movimientos de caja de la empresa: gastos ('out') y otros ingresos ('in').
@@ -127,6 +127,76 @@ function rangeOccurrences(expense, from, to) {
   return fechas;
 }
 
+/**
+ * El cobro que "cubre" una fecha: el último que cayó en o antes de ella.
+ * Un alquiler que se paga el día 5 cubre desde el día 5 hasta el 4 del mes
+ * siguiente, así que el día 20 lo cubre el cobro del 5.
+ */
+function coveringDate(expense, fecha) {
+  const step = KIND_STEP[expense.kind];
+  if (!step) return null;
+
+  const anchor = expense.anchor_date;
+  if (anchor >= fecha) return anchor;
+
+  const [ay, am] = anchor.split('-').map(Number);
+  const [fy, fm] = fecha.split('-').map(Number);
+  const meses = fy * 12 + (fm - 1) - (ay * 12 + (am - 1));
+  let vueltas = Math.max(0, Math.floor(meses / step));
+
+  // El salto por meses puede pasarse o quedarse corto un día; se ajusta.
+  while (vueltas > 0 && addMonths(anchor, vueltas * step) > fecha) vueltas -= 1;
+  while (addMonths(anchor, (vueltas + 1) * step) <= fecha) vueltas += 1;
+  return addMonths(anchor, vueltas * step);
+}
+
+/**
+ * Lo que le toca a un periodo de un gasto, repartido por días.
+ *
+ * Un alquiler de 500 € no se gasta "de golpe el día 5": cubre todo el mes. Si
+ * miras un solo día, lo justo es que te toquen 500/31 = 16,13 €, no 500 € ni 0 €.
+ * Por eso los gastos que se repiten se prorratean entre los días que cubren, y
+ * lo que se suma es el trozo que cae dentro del periodo que estás mirando.
+ *
+ * Los diarios ya van por días y los pagos sueltos son de un día concreto: esos
+ * no se reparten, se cuentan tal cual.
+ *
+ * Cada tramo se redondea una sola vez sobre su total, así que el mes entero
+ * suma exactamente el importe del recibo, sin céntimos perdidos por el camino.
+ */
+function rangeAccrual(expense, from, to) {
+  if (!from || !to || to < from) return { cents: 0, prorrateado: false };
+
+  if (expense.kind === 'daily' || expense.kind === 'once') {
+    const dias = rangeOccurrences(expense, from, to);
+    return { cents: dias.reduce((a, d) => a + d.amount_cents, 0), prorrateado: false };
+  }
+
+  const step = KIND_STEP[expense.kind];
+  if (!step) return { cents: 0, prorrateado: false };
+
+  let cents = 0;
+  // El cobro que cubre el primer día del periodo puede haber caído antes de él.
+  let inicio = coveringDate(expense, from);
+  while (inicio && inicio <= to) {
+    const siguiente = addMonths(inicio, step);
+    const fin = addDays(siguiente, -1);
+    const span = daysBetween(inicio, fin);
+
+    const desde = inicio > from ? inicio : from;
+    const hasta = fin < to ? fin : to;
+    const dentro = daysBetween(desde, hasta);
+
+    if (dentro > 0) {
+      cents +=
+        dentro >= span ? expense.amount_cents : Math.round((expense.amount_cents * dentro) / span);
+    }
+    inicio = siguiente;
+  }
+
+  return { cents, prorrateado: true };
+}
+
 /** Importes ajustados a mano de un gasto entre dos fechas. */
 function dayOverrides(expenseId, from, to) {
   if (!expenseId) return new Map();
@@ -197,10 +267,15 @@ function monthExpenses(month, direction = 'out') {
 }
 
 /**
- * Gastos que caen en un periodo, ya con la cuenta hecha.
- * Cada fila trae cuántas veces cae ('veces'), el total del periodo, cuánto va
- * gastado hasta hoy y cuánto está aún por llegar. Los inactivos quedan fuera:
- * son los que has puesto en pausa.
+ * Gastos que le tocan a un periodo, ya con la cuenta hecha.
+ *
+ * `total_cents` es la parte que le corresponde al periodo, prorrateada (ver
+ * rangeAccrual): por eso un alquiler mensual aparece también si miras un solo
+ * día, con su parte, en lugar de desaparecer porque ese día no tocaba pagar.
+ * `dias` y `veces` siguen siendo los pagos de verdad que caen dentro, que es lo
+ * que hace falta para saber cuándo sale el dinero de la cuenta.
+ *
+ * Los inactivos quedan fuera: son los que has puesto en pausa.
  */
 function rangeExpenses({ from, to, direction = 'out' }) {
   const hoy = todayISO();
@@ -208,19 +283,25 @@ function rangeExpenses({ from, to, direction = 'out' }) {
 
   for (const e of listExpenses({ direction })) {
     if (!e.active) continue;
-    const dias = rangeOccurrences(e, from, to);
-    if (dias.length === 0) continue;
+
+    const pagos = rangeOccurrences(e, from, to);
+    const periodo = rangeAccrual(e, from, to);
+    if (periodo.cents === 0 && pagos.length === 0) continue;
+
+    // Lo que ya ha corrido de ese periodo: desde su principio hasta hoy.
+    const corte = hoy < to ? hoy : to;
+    const corrido = hoy < from ? { cents: 0 } : rangeAccrual(e, from, corte);
 
     rows.push({
       ...e,
-      fecha: dias[0].fecha,
-      veces: dias.length,
-      dias,
-      ajustados: dias.filter((d) => d.ajustado).length,
-      total_cents: dias.reduce((a, d) => a + d.amount_cents, 0),
-      // Lo que ya ha caído del 1 hasta hoy, y lo que queda por caer este mes.
-      hasta_hoy_cents: dias.filter((d) => d.fecha <= hoy).reduce((a, d) => a + d.amount_cents, 0),
-      pendiente_cents: dias.filter((d) => d.fecha > hoy).reduce((a, d) => a + d.amount_cents, 0),
+      fecha: pagos.length ? pagos[0].fecha : nextDate(e, from) || from,
+      veces: pagos.length,
+      dias: pagos,
+      ajustados: pagos.filter((d) => d.ajustado).length,
+      prorrateado: periodo.prorrateado,
+      total_cents: periodo.cents,
+      hasta_hoy_cents: corrido.cents,
+      pendiente_cents: periodo.cents - corrido.cents,
     });
   }
 
@@ -302,6 +383,8 @@ module.exports = {
   dateInMonth,
   monthOccurrences,
   rangeOccurrences,
+  rangeAccrual,
+  coveringDate,
   setDayAmount,
   listDayAmounts,
   listExpenses,

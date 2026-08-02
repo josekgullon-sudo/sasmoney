@@ -26,7 +26,7 @@ function camposPeriodo(periodo) {
  * reparte la inversión entre las trabajadoras.
  */
 function adminCaja({
-  user, flash, warning, periodo, hoy,
+  user, flash, warning, periodo, vista, hoy,
   gastos, ingresos, totales,
   editando, diasAjustados,
   workers, reparto, otrosGastos,
@@ -34,25 +34,35 @@ function adminCaja({
   const e = editando;
   const esIngreso = e ? e.direction === 'in' : false;
   const { corte, enCurso } = periodo;
-  const hasta = corte ? rangeLabel(periodo.from, corte) : 'aún sin empezar';
+  const hasta =
+    vista === 'hastahoy'
+      ? corte
+        ? rangeLabel(periodo.from, corte)
+        : 'aún sin empezar'
+      : rangeLabel(periodo.from, periodo.to);
+  const otraVista = enCurso ? (vista === 'hastahoy' ? 'en todo el periodo' : 'hasta hoy') : '';
 
   const body = `
 <h1>Caja · ${esc(primeraMayuscula(periodo.label))}</h1>
 <p class="sub">El dinero que entra y sale por fuera de los servicios.
-   ${esc(periodExplained(periodo))}</p>
-${periodPicker('/admin/caja', periodo, { editar: e ? e.id : '' })}
+   ${esc(periodExplained(periodo, vista))}</p>
+${periodPicker('/admin/caja', periodo, { editar: e ? e.id : '' }, vista)}
 
 ${stats([
   { k: 'Entra', v: money(totales.entraCents), sub: 'servicios + otros ingresos' },
   {
     k: 'Sale',
     v: money(totales.gastosCents),
-    sub: enCurso ? `${money(totales.gastosMesCents)} al acabar` : `${gastos.delMes.length} apunte(s)`,
+    sub: enCurso
+      ? `${money(totales.gastosOtraVistaCents)} ${otraVista}`
+      : `${gastos.delMes.length} apunte(s)`,
   },
   {
     k: 'De eso, marketing',
     v: money(totales.inversionCents),
-    sub: enCurso ? `${money(totales.inversionMesCents)} al acabar` : 'publicidad y similares',
+    sub: enCurso
+      ? `${money(totales.inversionOtraVistaCents)} ${otraVista}`
+      : 'publicidad y similares',
   },
   { k: 'Queda', v: money(totales.quedaCents), sub: 'para la empresa', accent: true },
 ])}
@@ -269,7 +279,7 @@ function listaMovimientos(filas, direction) {
   return `<div class="table-wrap"><table>
   <thead><tr>
     <th>Concepto</th><th class="hide-narrow">¿Cada cuánto?</th>
-    <th class="num hide-narrow">Importe</th><th class="num">Hasta hoy</th><th></th>
+    <th class="num hide-narrow">Importe</th><th class="num">Le toca</th><th></th>
   </tr></thead>
   <tbody>
     ${filas
@@ -288,9 +298,9 @@ function listaMovimientos(filas, direction) {
         }</td>
       <td class="num">${
         g.esteMes
-          ? `<strong>${money(g.esteMes.hasta_hoy_cents)}</strong>${
-              g.esteMes.pendiente_cents > 0
-                ? `<div class="small muted">${money(g.esteMes.total_cents)} a fin de mes</div>`
+          ? `<strong>${money(g.esteMes.total_cents)}</strong>${
+              g.esteMes.prorrateado && g.esteMes.total_cents !== g.amount_cents
+                ? '<div class="small muted">parte proporcional</div>'
                 : ''
             }${
               g.esteMes.veces > 1
@@ -335,7 +345,7 @@ function tarjetaReparto(workers, inversionCents, reparto, periodo, otrosGastos, 
       <thead><tr>
         <th>Trabajador</th>
         <th class="num" style="width:130px">Su porcentaje</th>
-        <th class="num hide-narrow">Le toca hasta hoy</th>
+        <th class="num hide-narrow">Le toca</th>
       </tr></thead>
       <tbody>
         ${reparto.rows
@@ -411,12 +421,6 @@ function tarjetaReparto(workers, inversionCents, reparto, periodo, otrosGastos, 
     <tbody>
       <tr><td>Resto de gastos ${esc(hasta)}</td>
           <td class="num">${money(otrosGastos.totalCents)}</td></tr>
-      ${
-        periodo.enCurso
-          ? `<tr><td class="muted">Si acabara ${esc(periodo.label)}</td>
-             <td class="num muted">${money(otrosGastos.mesCents)}</td></tr>`
-          : ''
-      }
       <tr><td>Entre ${otrosGastos.activos} trabajador(es) en activo</td>
           <td class="num"><strong>${money(otrosGastos.cadaUnoCents)} cada uno</strong></td></tr>
     </tbody>

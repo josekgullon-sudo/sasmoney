@@ -99,21 +99,28 @@ function money(cents) {
  * @param {string} action  A dónde se envía ('/admin', '/admin/servicios'…).
  * @param {object} periodo Lo que devuelve resolvePeriod().
  * @param {object} extra   Otros filtros que hay que conservar (trabajador…).
+ * @param {string} vista   'completo' | 'hastahoy' en las pantallas de dinero;
+ *                         null en las que no manejan gastos.
  */
-function periodPicker(action, periodo, extra = {}) {
-  const ocultos = Object.entries(extra)
-    .filter(([, v]) => v !== null && v !== undefined && v !== '')
+function periodPicker(action, periodo, extra = {}, vista = null) {
+  // Todo lo que no es el periodo viaja igual en los enlaces y en los
+  // formularios, para no perder el trabajador elegido ni la vista al filtrar.
+  const filtros = limpio({ ...extra, ...(vista ? { vista } : {}) });
+
+  const ocultos = Object.entries(filtros)
     .map(([k, v]) => `<input type="hidden" name="${esc(k)}" value="${esc(v)}">`)
     .join('');
 
-  const enlace = (params) => {
-    const q = new URLSearchParams({ ...limpio(extra), ...params }).toString();
-    return `${action}?${q}`;
-  };
+  const enlace = (params) => `${action}?${new URLSearchParams({ ...filtros, ...params })}`;
 
   // Si lo que se está viendo no es ninguno de los atajos, el cajón de fechas se
   // abre solo: es la única forma de ver cuál es el periodo elegido.
   const activo = atajoActivo(periodo);
+
+  // Mirar el periodo entero o sólo lo corrido sólo tiene sentido mientras le
+  // queden días por delante; si ya acabó, las dos cosas son lo mismo.
+  const conVista = vista && periodo.enCurso && periodo.corte;
+  const todoEl = periodo.month ? 'Todo el mes' : 'Todo el periodo';
 
   return `<div class="card period" style="padding:12px 14px">
   <div class="chips" style="margin-top:0">
@@ -124,6 +131,18 @@ function periodPicker(action, periodo, extra = {}) {
         )}</a>`
     ).join('')}
   </div>
+  ${
+    conVista
+      ? `<div class="chips">
+      <a class="chip ${vista === 'completo' ? 'is-on' : ''}" href="${esc(
+          enlace({ ...periodoParams(periodo), vista: 'completo' })
+        )}">${esc(todoEl)}</a>
+      <a class="chip ${vista === 'hastahoy' ? 'is-on' : ''}" href="${esc(
+          enlace({ ...periodoParams(periodo), vista: 'hastahoy' })
+        )}">Sólo hasta hoy</a>
+    </div>`
+      : ''
+  }
   <details class="box" style="margin-top:12px" ${activo ? '' : 'open'}>
     <summary>Otro mes, un día suelto o entre dos fechas</summary>
     <div class="row">
@@ -157,6 +176,11 @@ function periodPicker(action, periodo, extra = {}) {
     <div class="hint">Para ver <strong>un solo día</strong>, pon esa fecha en "Desde" y deja "Hasta" vacío.</div>
   </details>
 </div>`;
+}
+
+/** El periodo como parámetros sueltos, para componer una dirección. */
+function periodoParams(periodo) {
+  return periodo.month ? { month: periodo.month } : { from: periodo.from, to: periodo.to };
 }
 
 /** Quita del objeto lo que no tiene valor, para no ensuciar las direcciones. */

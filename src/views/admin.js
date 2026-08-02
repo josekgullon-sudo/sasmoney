@@ -22,37 +22,49 @@ function camposPeriodo(periodo) {
 }
 
 function adminHome({
-  user, flash, warning, periodo, rows, totals, pendingTotalCents,
+  user, flash, warning, periodo, vista, rows, totals, pendingTotalCents,
   gastos, ingresos, inversion, inversionSinAsignarCents, otrosGastos, trabajadoresActivos,
 }) {
   const { corte, enCurso } = periodo;
-  const q = periodQuery(periodo);
-  // Todo lo que se enseña va del día 1 al día de hoy. La previsión del mes
-  // entero se ve al lado, para que se distinga lo gastado de lo que falta.
+  const q = periodQuery(periodo, { vista });
+
+  // Las cifras de arriba siguen la vista elegida; el cuadro de abajo enseña
+  // siempre las dos, que es donde se ve la diferencia de un vistazo.
+  const quedaCents =
+    totals.totalCents - totals.commissionCents + ingresos.cents - gastos.cents;
   const quedaHoyCents =
     totals.totalCents - totals.commissionCents + ingresos.hastaHoyCents - gastos.hastaHoyCents;
   const quedaMesCents =
     totals.totalCents - totals.commissionCents + ingresos.totalCents - gastos.totalCents;
+
+  // En el cuadro del periodo manda la vista elegida: su columna va primera y
+  // siempre se ve; la otra queda al lado, y en el móvil se esconde.
+  const orden = (hoyCents, mesCents) =>
+    vista === 'hastahoy' ? [hoyCents, mesCents] : [mesCents, hoyCents];
+  // Si al periodo no le quedan días, las dos vistas son la misma: sobra el matiz.
+  const cabeceras = enCurso
+    ? orden('Lo que llevas', periodo.month ? 'Todo el mes' : 'Todo el periodo')
+    : ['Total', ''];
 
   const pct = (parte, todo) => (todo > 0 ? (parte / todo) * 100 : 0);
   const fmtPct = (n) => `${n.toFixed(1).replace('.', ',')} %`;
 
   const body = `
 <h1>Resumen · ${esc(primeraMayuscula(periodo.label))}</h1>
-<p class="sub">${esc(periodExplained(periodo))}</p>
-${periodPicker('/admin', periodo)}
+<p class="sub">${esc(periodExplained(periodo, vista))}</p>
+${periodPicker('/admin', periodo, {}, vista)}
 
 ${stats([
-  { k: 'Entra', v: money(totals.totalCents + ingresos.hastaHoyCents), sub: `${totals.count} servicio(s)` },
+  { k: 'Entra', v: money(totals.totalCents + ingresos.cents), sub: `${totals.count} servicio(s)` },
   { k: 'Se llevan ellas', v: money(totals.commissionCents), sub: 'comisiones' },
-  { k: 'Gastos', v: money(gastos.hastaHoyCents), sub: `${money(inversion.hastaHoyCents)} de marketing` },
-  { k: 'Me queda', v: money(quedaHoyCents), sub: 'para la empresa', accent: true },
+  { k: 'Gastos', v: money(gastos.cents), sub: `${money(inversion.cents)} de marketing` },
+  { k: 'Me queda', v: money(quedaCents), sub: 'para la empresa', accent: true },
 ])}
 
 <div class="card" style="margin-top:16px">
   <h2>Cada trabajador</h2>
-  <p class="sub">Lo que factura, lo que se lleva, el marketing que carga y lo que deja,
-     acumulado ${esc(rangeLabel(periodo.from, corte))}.</p>
+  <p class="sub">Lo que factura, lo que se lleva, el marketing que carga y lo que deja
+     ${esc(vista === 'hastahoy' ? rangeLabel(periodo.from, corte) : rangeLabel(periodo.from, periodo.to))}.</p>
   ${
     rows.length === 0
       ? emptyState('Nadie ha apuntado nada en este periodo.')
@@ -144,20 +156,20 @@ ${stats([
   <details class="box">
     <summary>Qué significa cada columna</summary>
     <p class="small"><strong>Marketing</strong>: el porcentaje de la publicidad que le has asignado
-       y, debajo, lo que eso supone en euros <strong>${
-         corte ? esc(rangeLabel(periodo.from, corte)) : 'en este periodo'
-       }</strong>. De la publicidad de todo el periodo (${money(
-    inversion.totalCents
-  )}) van gastados ${money(inversion.hastaHoyCents)}. Los porcentajes se cambian en
+       y, debajo, lo que eso supone en euros. De la publicidad del periodo (${money(
+         inversion.totalCents
+       )}) van gastados ${money(inversion.hastaHoyCents)}. Los porcentajes se cambian en
        <a href="/admin/caja?${esc(q)}">Caja</a>.${
          inversionSinAsignarCents > 0
            ? ` Quedan ${money(inversionSinAsignarCents)} sin asignar a nadie: los paga la empresa.`
            : ''
        }</p>
     <p class="small"><strong>Resto de gastos</strong>: lo que no es marketing (${money(
-      otrosGastos.hastaHoyCents
-    )} hasta hoy) dividido <strong>a partes iguales</strong> entre los ${trabajadoresActivos}
-       trabajadores en activo, así que si entra alguien nuevo el reparto se ajusta solo.</p>
+      otrosGastos.cents
+    )}) dividido <strong>a partes iguales</strong> entre los ${trabajadoresActivos}
+       trabajadores en activo, así que si entra alguien nuevo el reparto se ajusta solo.
+       Los gastos que se repiten se reparten por días: un alquiler de 500 € al mes son
+       16,13 € si miras un solo día.</p>
     <p class="small"><strong>Deja</strong>: lo que factura menos su comisión y menos los gastos que
        carga. Es lo que aporta de verdad a la empresa.</p>
     <p class="small"><strong>A liquidar</strong>: lo que le debes ahora mismo, de lo que aún no le has pagado.</p>
@@ -170,44 +182,55 @@ ${stats([
     <table>
       <thead><tr>
         <th></th>
-        <th class="num">Lo que llevas</th>
-        ${enCurso ? '<th class="num hide-narrow">Al acabar</th>' : ''}
+        <th class="num">${esc(cabeceras[0])}</th>
+        ${enCurso ? `<th class="num hide-narrow">${esc(cabeceras[1])}</th>` : ''}
       </tr></thead>
       <tbody>
-        ${filaMes('Facturado por todos', totals.totalCents, totals.totalCents, enCurso)}
+        ${filaMes('Facturado por todos', orden(totals.totalCents, totals.totalCents), enCurso)}
         ${
           ingresos.totalCents > 0
-            ? filaMes('+ Otros ingresos', ingresos.hastaHoyCents, ingresos.totalCents, enCurso, '+')
+            ? filaMes('+ Otros ingresos', orden(ingresos.hastaHoyCents, ingresos.totalCents), enCurso, '+')
             : ''
         }
-        ${filaMes('− Comisiones', totals.commissionCents, totals.commissionCents, enCurso, '−')}
+        ${filaMes('− Comisiones', orden(totals.commissionCents, totals.commissionCents), enCurso, '−')}
         ${
           inversion.totalCents > 0
-            ? filaMes('− Marketing', inversion.hastaHoyCents, inversion.totalCents, enCurso, '−')
+            ? filaMes('− Marketing', orden(inversion.hastaHoyCents, inversion.totalCents), enCurso, '−')
             : ''
         }
         ${
           otrosGastos.totalCents > 0
-            ? filaMes('− Resto de gastos', otrosGastos.hastaHoyCents, otrosGastos.totalCents, enCurso, '−')
+            ? filaMes(
+                '− Resto de gastos',
+                orden(otrosGastos.hastaHoyCents, otrosGastos.totalCents),
+                enCurso,
+                '−'
+              )
             : ''
         }
-        <tr>
+        ${(() => {
+          const [primero, segundo] = orden(quedaHoyCents, quedaMesCents);
+          return `<tr>
           <td><strong>Me queda</strong></td>
           <td class="num"><strong style="color:${
-            quedaHoyCents < 0 ? 'var(--danger)' : 'inherit'
-          }">${money(quedaHoyCents)}</strong></td>
-          ${enCurso ? `<td class="num muted hide-narrow">${money(quedaMesCents)}</td>` : ''}
-        </tr>
+            primero < 0 ? 'var(--danger)' : 'inherit'
+          }">${money(primero)}</strong></td>
+          ${enCurso ? `<td class="num muted hide-narrow">${money(segundo)}</td>` : ''}
+        </tr>`;
+        })()}
       </tbody>
     </table>
   </div>
   ${
     enCurso
-      ? `<p class="sub" style="margin-top:12px">De aquí al final del periodo quedan por caer
-         <strong>${money(gastos.pendientesCents)}</strong> de gastos. Si no entrara nada más,
-         el periodo acabaría en <strong>${money(
-           quedaMesCents
-         )}</strong>. Lo que vale hoy es la primera cifra.</p>`
+      ? vista === 'completo'
+        ? `<p class="sub" style="margin-top:12px">Estás viendo el periodo entero: de esos gastos,
+           <strong>${money(gastos.pendientesCents)}</strong> aún están por caer. De momento llevas
+           gastado ${money(gastos.hastaHoyCents)} y te quedarían
+           <strong>${money(quedaHoyCents)}</strong>.</p>`
+        : `<p class="sub" style="margin-top:12px">Estás viendo sólo lo que ha corrido: quedan por
+           caer <strong>${money(gastos.pendientesCents)}</strong> de gastos, así que si no entrara
+           nada más el periodo acabaría en <strong>${money(quedaMesCents)}</strong>.</p>`
       : ''
   }
   ${
@@ -226,12 +249,12 @@ ${stats([
   return layout({ title: 'Resumen', user, body, active: 'resumen', flash, warning });
 }
 
-/** Una fila del cuadro del mes: lo que va hasta hoy y, al lado, la previsión. */
-function filaMes(concepto, hastaHoyCents, mesCents, enCurso, signo = '') {
+/** Una fila del cuadro del periodo: la cifra que manda y, al lado, la otra. */
+function filaMes(concepto, [primero, segundo], enCurso, signo = '') {
   return `<tr>
     <td>${esc(concepto)}</td>
-    <td class="num">${signo}${money(hastaHoyCents)}</td>
-    ${enCurso ? `<td class="num muted hide-narrow">${signo}${money(mesCents)}</td>` : ''}
+    <td class="num">${signo}${money(primero)}</td>
+    ${enCurso ? `<td class="num muted hide-narrow">${signo}${money(segundo)}</td>` : ''}
   </tr>`;
 }
 

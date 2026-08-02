@@ -174,3 +174,65 @@ test('el resumen por fechas cuadra con el del mes', () => {
   assert.equal(porFechas.totalCents, porMes.totalCents);
   assert.equal(porFechas.hastaHoyCents, porMes.hastaHoyCents);
 });
+
+test('un gasto que se repite se reparte entre los días que cubre', () => {
+  const { rangeAccrual } = require('../src/expenses');
+  const alquiler = { id: 0, kind: 'monthly', anchor_date: '2026-08-01', amount_cents: 50000 };
+  const cents = (f, t) => rangeAccrual(alquiler, f, t).cents;
+
+  // El mes entero suma el recibo completo, ni un céntimo de más ni de menos.
+  assert.equal(cents('2026-08-01', '2026-08-31'), 50000);
+  // Un día suelto son 500/31, no 0 € (que era lo que salía antes) ni 500 €.
+  assert.equal(cents('2026-08-02', '2026-08-02'), Math.round(50000 / 31));
+  assert.equal(cents('2026-08-01', '2026-08-15'), Math.round((50000 * 15) / 31));
+  // Antes de empezar no cuenta nada.
+  assert.equal(cents('2026-07-01', '2026-07-31'), 0);
+
+  // Febrero es más corto, así que el día vale más.
+  const feb = { id: 0, kind: 'monthly', anchor_date: '2026-02-01', amount_cents: 50000 };
+  assert.equal(rangeAccrual(feb, '2026-02-10', '2026-02-10').cents, Math.round(50000 / 28));
+});
+
+test('el trimestral y el anual se reparten por sus días, no por su mes de pago', () => {
+  const { rangeAccrual } = require('../src/expenses');
+  // Se paga el 20 de enero y cubre hasta el 19 de abril: 90 días.
+  const trimestral = { id: 0, kind: 'quarterly', anchor_date: '2026-01-20', amount_cents: 30000 };
+
+  // A agosto le tocan sus 31 días del tramo que empezó el 20 de julio (92 días).
+  assert.equal(rangeAccrual(trimestral, '2026-08-01', '2026-08-31').cents, Math.round((30000 * 31) / 92));
+  // Y no cero, que es lo que pasaría si sólo contara el mes en que se paga.
+  assert.ok(rangeAccrual(trimestral, '2026-08-02', '2026-08-02').cents > 0);
+
+  const anual = { id: 0, kind: 'yearly', anchor_date: '2026-03-10', amount_cents: 36500 };
+  assert.ok(rangeAccrual(anual, '2026-09-01', '2026-09-30').cents > 0);
+  // Un año entero desde su fecha suma el recibo completo.
+  assert.equal(rangeAccrual(anual, '2026-03-10', '2027-03-09').cents, 36500);
+});
+
+test('los diarios y los pagos sueltos no se reparten: caen donde caen', () => {
+  const { rangeAccrual } = require('../src/expenses');
+  const pub = { id: 0, kind: 'daily', anchor_date: '2026-08-01', amount_cents: 2000 };
+  assert.equal(rangeAccrual(pub, '2026-08-02', '2026-08-02').cents, 2000);
+  assert.equal(rangeAccrual(pub, '2026-08-01', '2026-08-31').cents, 2000 * 31);
+
+  const suelto = { id: 0, kind: 'once', anchor_date: '2026-08-10', amount_cents: 7500 };
+  assert.equal(rangeAccrual(suelto, '2026-08-10', '2026-08-10').cents, 7500);
+  assert.equal(rangeAccrual(suelto, '2026-08-01', '2026-08-09').cents, 0);
+});
+
+test('mirando un solo día siguen apareciendo los gastos que se repiten', () => {
+  const { createExpense, rangeExpenses } = require('../src/expenses');
+  const { todayISO, currentMonth, monthRange } = require('../src/util');
+
+  const hoy = todayISO();
+  const { from } = monthRange(currentMonth());
+  createExpense({ name: 'Gestoría mensual', amount_cents: 9300, kind: 'monthly', anchor_date: from, notes: '' });
+
+  const deHoy = rangeExpenses({ from: hoy, to: hoy, direction: 'out' });
+  const gestoria = deHoy.find((g) => g.name === 'Gestoría mensual');
+
+  // Antes desaparecía porque ese día no tocaba pagarla.
+  assert.ok(gestoria, 'la gestoría tiene que salir aunque hoy no toque pagarla');
+  assert.equal(gestoria.prorrateado, true);
+  assert.ok(gestoria.total_cents > 0 && gestoria.total_cents < 9300);
+});

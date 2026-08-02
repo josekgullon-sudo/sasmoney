@@ -105,18 +105,35 @@ test('el periodo viaja en la dirección sin perderse', () => {
 
 test('el periodo se explica sin que quepa duda de qué se está mirando', () => {
   const { periodExplained } = require('../src/period');
-  const di = (q) => periodExplained(resolvePeriod(q, HOY));
+  const di = (q, vista) => periodExplained(resolvePeriod(q, HOY), vista);
 
-  // Un mes en marcha: se dice cuántos días llevas, para que no parezca el día suelto.
+  // Mes en marcha visto entero: se avisa de que los gastos incluyen lo que falta.
   assert.equal(
-    di({ month: '2026-08' }),
+    di({ month: '2026-08' }, 'completo'),
+    'Agosto 2026 entero, los 31 días. Los gastos incluyen los que aún faltan por caer;' +
+      ' lo facturado, en cambio, sólo puede ser lo que llevas (2 días).'
+  );
+  // Y visto sólo hasta hoy, se dice cuántos días llevas.
+  assert.equal(
+    di({ month: '2026-08' }, 'hastahoy'),
     'Van 2 de los 31 días de agosto 2026. Todo lo que ves es lo acumulado desde el sáb, 1 ago,' +
       ' no la previsión de todo el periodo.'
   );
-  assert.equal(di({ p: 'hoy' }), 'Sólo el dom, 2 ago.');
-  assert.equal(di({ month: '2026-07' }), 'julio 2026 entero, del mié, 1 jul al vie, 31 jul.');
-  assert.match(di({ from: '2026-08-01', to: '2026-08-15' }), /^Van 2 de los 15 días del sáb, 1 ago/);
-  assert.match(di({ month: '2026-09' }), /todavía no ha empezado/);
+
+  // En lo que ya no está en marcha las dos vistas dan lo mismo, y no se menciona.
+  for (const vista of ['completo', 'hastahoy']) {
+    assert.equal(di({ p: 'hoy' }, vista), 'Sólo el dom, 2 ago.');
+    assert.equal(di({ month: '2026-07' }, vista), 'julio 2026 entero, del mié, 1 jul al vie, 31 jul.');
+    assert.match(di({ month: '2026-09' }, vista), /todavía no ha empezado/);
+  }
+});
+
+test('la vista se lee de la dirección y por defecto es el periodo entero', () => {
+  const { readVista } = require('../src/period');
+  assert.equal(readVista({}), 'completo');
+  assert.equal(readVista({ vista: 'hastahoy' }), 'hastahoy');
+  assert.equal(readVista({ vista: 'completo' }), 'completo');
+  assert.equal(readVista({ vista: 'rompeme' }), 'completo');
 });
 
 test('cuenta bien los días de cada periodo', () => {

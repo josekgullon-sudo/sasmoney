@@ -11,7 +11,7 @@ const {
   COMMISSION_TYPES,
 } = require('../commission');
 const { todayISO, nowHM, isValidTime, isValidDate, formatDate } = require('../util');
-const { resolvePeriod, periodQuery } = require('../period');
+const { resolvePeriod, periodQuery, readVista } = require('../period');
 const expenses = require('../expenses');
 const investment = require('../investment');
 const cajaViews = require('../views/caja');
@@ -55,14 +55,22 @@ router.get('/', (req, res) => {
   const gastosMes = expenses.rangeSummary({ from, to, direction: 'out' });
   const ingresosMes = expenses.rangeSummary({ from, to, direction: 'in' });
 
+  // Con el periodo aún en marcha se puede mirar de dos maneras: el periodo
+  // entero (con lo que falta por caer) o sólo lo que ya ha corrido.
+  const vista = readVista(req.query);
+  const cifra = (x) => (vista === 'hastahoy' ? x.hastaHoyCents : x.totalCents);
+  const inversionCents = cifra(gastosMes.inversion);
+  const otrosGastosCents = cifra(gastosMes.otros);
+  const gastosCents = cifra(gastosMes);
+  const ingresosCents = cifra(ingresosMes);
+
   const ordenadas = base.sort((a, b) => b.totalCents - a.totalCents);
 
-  // Los trabajadores cargan con lo que va gastado del día 1 a hoy, no con la
-  // previsión del mes entero: lo que se ha invertido en ellos hasta ahora.
-  const reparto = investment.split(gastosMes.inversion.hastaHoyCents, ordenadas);
+  // Cada trabajador carga con su porcentaje de la publicidad del periodo.
+  const reparto = investment.split(inversionCents, ordenadas);
 
   // El resto de gastos (alquiler, gestoría...) va a partes iguales.
-  const porIgual = investment.splitEqually(gastosMes.otros.hastaHoyCents, ordenadas);
+  const porIgual = investment.splitEqually(otrosGastosCents, ordenadas);
 
   const rows = reparto.rows.map((r) => {
     const generales = porIgual.get(r.user.id) || 0;
@@ -82,20 +90,22 @@ router.get('/', (req, res) => {
       flash: res.locals.flash,
       warning: res.locals.warning,
       periodo,
+      vista,
       rows,
       totals,
       pendingTotalCents: rows.reduce((a, r) => a + r.pendingCommissionCents, 0),
-      inversion: gastosMes.inversion,
+      inversion: { ...gastosMes.inversion, cents: inversionCents },
       inversionSinAsignarCents: reparto.sinAsignarCents,
-      otrosGastos: gastosMes.otros,
+      otrosGastos: { ...gastosMes.otros, cents: otrosGastosCents },
       trabajadoresActivos: ordenadas.filter((r) => r.user.active).length,
       gastos: {
+        cents: gastosCents,
         totalCents: gastosMes.totalCents,
         hastaHoyCents: gastosMes.hastaHoyCents,
         pendientesCents: gastosMes.pendienteCents,
         proximo: proximos[0] || null,
       },
-      ingresos: { totalCents: ingresosMes.totalCents, hastaHoyCents: ingresosMes.hastaHoyCents },
+      ingresos: { ...ingresosMes, cents: ingresosCents },
     })
   );
 });
@@ -519,6 +529,13 @@ router.get('/caja', (req, res) => {
   const gastos = delPeriodo('out');
   const ingresos = delPeriodo('in');
 
+  const vista = readVista(req.query);
+  const cifra = (x) => (vista === 'hastahoy' ? x.hastaHoyCents : x.totalCents);
+  const gastosCents = cifra(gastos);
+  const inversionCents = cifra(gastos.inversion);
+  const otrosCents = cifra(gastos.otros);
+  const ingresosCents = cifra(ingresos);
+
   const servicios = repo.settlementRows({ from, to, pendingOnly: false });
   const facturadoCents = servicios.reduce((a, r) => a + r.totalCents, 0);
   const comisionesCents = servicios.reduce((a, r) => a + r.calc.commissionCents, 0);
@@ -538,28 +555,29 @@ router.get('/caja', (req, res) => {
       flash: res.locals.flash,
       warning: res.locals.warning,
       periodo,
+      vista,
       hoy: todayISO(),
       gastos,
       ingresos,
       totales: {
-        entraCents: facturadoCents + ingresos.hastaHoyCents,
-        gastosCents: gastos.hastaHoyCents,
-        gastosMesCents: gastos.totalCents,
-        inversionCents: gastos.inversion.hastaHoyCents,
-        inversionMesCents: gastos.inversion.totalCents,
-        quedaCents: facturadoCents + ingresos.hastaHoyCents - comisionesCents - gastos.hastaHoyCents,
+        entraCents: facturadoCents + ingresosCents,
+        gastosCents,
+        gastosOtraVistaCents: vista === 'hastahoy' ? gastos.totalCents : gastos.hastaHoyCents,
+        inversionCents,
+        inversionOtraVistaCents:
+          vista === 'hastahoy' ? gastos.inversion.totalCents : gastos.inversion.hastaHoyCents,
+        quedaCents: facturadoCents + ingresosCents - comisionesCents - gastosCents,
       },
       editando,
       diasAjustados: editando ? expenses.listDayAmounts(editando.id, from, to) : [],
       workers,
-      reparto: investment.split(gastos.inversion.hastaHoyCents, filasReparto),
+      reparto: investment.split(inversionCents, filasReparto),
       otrosGastos: {
-        totalCents: gastos.otros.hastaHoyCents,
-        mesCents: gastos.otros.totalCents,
+        totalCents: otrosCents,
         activos: workers.filter((w) => w.active).length,
         cadaUnoCents:
           workers.filter((w) => w.active).length > 0
-            ? Math.round(gastos.otros.hastaHoyCents / workers.filter((w) => w.active).length)
+            ? Math.round(otrosCents / workers.filter((w) => w.active).length)
             : 0,
       },
     })

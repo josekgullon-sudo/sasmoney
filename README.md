@@ -27,11 +27,10 @@ Pensada para usarse desde el móvil: apuntar un cobro son dos toques.
 
 Cinco pantallas, cada una con una pregunta clara:
 
-- **Resumen** — *¿cómo va?* Todo va **hasta hoy**: lo que entra, lo que se llevan ellas, los
-  gastos y lo que queda. Y una fila por trabajador con lo que factura, su comisión, **su
-  porcentaje de marketing** y lo que eso le cuesta, **lo que deja** y lo que le debes, con el
-  botón de liquidar al lado. Al lado de cada cifra tienes la previsión de cómo acabaría el
-  periodo si no entrara nada más.
+- **Resumen** — *¿cómo va?* Lo que entra, lo que se llevan ellas, los gastos y lo que queda.
+  Y una fila por trabajador con lo que factura, su comisión, **su porcentaje de marketing** y
+  lo que eso le cuesta, **lo que deja** y lo que le debes, con el botón de liquidar al lado.
+  Mientras el mes está en marcha eliges si quieres verlo entero o sólo hasta hoy.
 - **Liquidar** — *¿cuánto le pago a X?* Eliges una trabajadora o todas. Cuando le
   pagues, pulsas *Liquidado* y su cuenta de ese periodo vuelve a cero: esos servicios quedan
   cerrados y ya no se cuentan otra vez ni se pueden modificar.
@@ -55,9 +54,9 @@ tiempo que tú elijas**, no sólo un mes:
 El periodo elegido te acompaña al saltar de una pantalla a otra, y va en la dirección web, así
 que puedes guardar en favoritos "los últimos 7 días" o "el 14 de julio" y volver cuando quieras.
 
-Debajo del título siempre pone en una frase qué estás mirando exactamente — *"Van 2 de los 31
-días de agosto 2026: todo lo que ves es lo acumulado desde el día 1"* — para que no haya duda
-entre "el mes hasta hoy" y "sólo hoy".
+Debajo del título siempre pone en una frase qué estás mirando exactamente, para que no haya
+duda entre "el mes entero" y "lo que llevas". Y mientras al periodo le queden días, dos botones
+más dejan elegir entre **Todo el mes** y **Sólo hasta hoy**.
 
 ## Las tres formas de pagar a una trabajadora
 
@@ -179,10 +178,16 @@ docker run -p 4400:4400 -v sasmoney-data:/data \
   y las siguientes se calculan, así que nunca se acaban ni hay que renovarlos.
 - **La caja del mes** es lo facturado, menos las comisiones, más los otros ingresos, menos
   los gastos.
-- **Las cuentas van hasta hoy**, no hasta el final del periodo. El día 2 del mes, de una
-  publicidad de 20 €/día se han gastado 40 €, no 620 €: enseñar el mes entero desde el día 1
-  hace parecer que la empresa está en números rojos cuando no lo está. La previsión de cómo
-  acabaría se ve al lado, en gris, para saber por dónde van los tiros.
+- **Los gastos que se repiten se reparten por días.** Un alquiler de 500 € al mes no se gasta
+  de golpe el día que se paga: cubre todo el mes. Así que si miras **un solo día** te tocan
+  500/31 = **16,13 €**, no 500 € ni 0 €. Lo mismo con los trimestrales y los anuales, que se
+  reparten entre los días de su tramo. Los diarios ya van por días y los pagos sueltos son de
+  un día concreto: esos no se reparten. El mes entero sigue sumando exactamente el recibo, sin
+  céntimos perdidos por el redondeo.
+- **Mientras el periodo está en marcha puedes verlo de dos maneras**, con un botón:
+  *Todo el mes* (lo que va a costar, con los gastos que aún faltan por caer) o *Sólo hasta
+  hoy* (lo que llevas gastado de verdad). Lo facturado siempre es lo que llevas: eso no se
+  puede adivinar.
 - **Un gasto diario cuenta tantas veces como días tenga el mes**: 20 €/día son 620 € en un
   mes de 31 días y 560 € en febrero. Si empieza a mitad de mes, sólo cuentan los días desde
   esa fecha. Y se puede **cambiar el importe de un día suelto** sin tocar los demás, para los
