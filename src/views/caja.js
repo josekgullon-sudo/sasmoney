@@ -1,9 +1,24 @@
 'use strict';
 
-const { esc, formatDate, formatDateShort, monthLabel, recentMonths } = require('../util');
+const { esc, formatDate, formatDateShort } = require('../util');
+const { periodQuery, rangeLabel } = require('../period');
 const { KINDS, KIND_LABELS } = require('../expenses');
 const { layout } = require('./layout');
-const { stats, money, emptyState } = require('./common');
+const { stats, money, emptyState, periodPicker } = require('./common');
+
+/** 'agosto 2026' → 'Agosto 2026'. Para los títulos. */
+function primeraMayuscula(texto) {
+  const s = String(texto || '');
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** El periodo escondido dentro de otro formulario, para no perderlo al enviar. */
+function camposPeriodo(periodo) {
+  return periodo.month
+    ? `<input type="hidden" name="month" value="${esc(periodo.month)}">`
+    : `<input type="hidden" name="from" value="${esc(periodo.from)}">
+       <input type="hidden" name="to" value="${esc(periodo.to)}">`;
+}
 
 /**
  * Una sola pantalla para todo el dinero que no viene de los servicios:
@@ -11,37 +26,38 @@ const { stats, money, emptyState } = require('./common');
  * reparte la inversión entre las trabajadoras.
  */
 function adminCaja({
-  user, flash, warning, month, hoy, corte, enCurso,
+  user, flash, warning, periodo, hoy,
   gastos, ingresos, totales,
   editando, diasAjustados,
   workers, reparto, otrosGastos,
 }) {
   const e = editando;
   const esIngreso = e ? e.direction === 'in' : false;
-  const hasta = corte ? `del 1 al ${formatDateShort(corte)}` : 'aún sin empezar';
+  const { corte, enCurso } = periodo;
+  const hasta = corte ? rangeLabel(periodo.from, corte) : 'aún sin empezar';
 
   const body = `
-<h1>Caja de ${esc(monthLabel(month))}</h1>
+<h1>Caja · ${esc(primeraMayuscula(periodo.label))}</h1>
 <p class="sub">El dinero que entra y sale por fuera de los servicios.
-   Las cifras de arriba son <strong>${esc(hasta)}</strong>.</p>
-${monthPickerCaja(month)}
+   Las cifras de arriba cuentan <strong>${esc(hasta)}</strong>.</p>
+${periodPicker('/admin/caja', periodo, { editar: e ? e.id : '' })}
 
 ${stats([
   { k: 'Entra', v: money(totales.entraCents), sub: 'servicios + otros ingresos' },
   {
     k: 'Sale',
     v: money(totales.gastosCents),
-    sub: enCurso ? `${money(totales.gastosMesCents)} a fin de mes` : `${gastos.delMes.length} gasto(s)`,
+    sub: enCurso ? `${money(totales.gastosMesCents)} al acabar` : `${gastos.delMes.length} gasto(s)`,
   },
   {
     k: 'De eso, marketing',
     v: money(totales.inversionCents),
-    sub: enCurso ? `${money(totales.inversionMesCents)} a fin de mes` : 'publicidad y similares',
+    sub: enCurso ? `${money(totales.inversionMesCents)} al acabar` : 'publicidad y similares',
   },
   { k: 'Queda', v: money(totales.quedaCents), sub: 'para la empresa', accent: true },
 ])}
 
-${e ? formularioEdicion(e, esIngreso, diasAjustados, month, hoy) : ''}
+${e ? formularioEdicion(e, esIngreso, diasAjustados, periodo, hoy) : ''}
 
 <div class="card" style="margin-top:16px">
   <h2>Gastos</h2>
@@ -57,7 +73,7 @@ ${e ? formularioEdicion(e, esIngreso, diasAjustados, month, hoy) : ''}
   ${listaMovimientos(ingresos.todos, 'in')}
 </div>
 
-${tarjetaReparto(workers, totales.inversionCents, reparto, month, otrosGastos, corte, enCurso)}
+${tarjetaReparto(workers, totales.inversionCents, reparto, periodo, otrosGastos, hasta)}
 
 <div class="card">
   <h2>Lo que viene</h2>
@@ -140,7 +156,7 @@ function formularioAlta(direction, hoy) {
 }
 
 /** Formulario grande, sólo cuando se está editando algo. */
-function formularioEdicion(e, esIngreso, diasAjustados, month, hoy) {
+function formularioEdicion(e, esIngreso, diasAjustados, periodo, hoy) {
   return `<div class="card" style="margin-top:16px;border-color:var(--brand)">
   <h2>Editar ${esIngreso ? 'ingreso' : 'gasto'}: ${esc(e.name)}</h2>
   <form method="post" action="/admin/caja/${e.id}">
@@ -192,7 +208,7 @@ function formularioEdicion(e, esIngreso, diasAjustados, month, hoy) {
     </div>
     <div class="actions">
       <button class="btn" type="submit">Guardar cambios</button>
-      <a class="btn ghost" href="/admin/caja?month=${esc(month)}">Cancelar</a>
+      <a class="btn ghost" href="/admin/caja?${esc(periodQuery(periodo))}">Cancelar</a>
     </div>
   </form>
 
@@ -203,7 +219,7 @@ function formularioEdicion(e, esIngreso, diasAjustados, month, hoy) {
   <p class="sub">Unos días se invierte más y otros menos. Aquí cambias sólo ese día,
      sin tocar los demás.</p>
   <form method="post" action="/admin/caja/${e.id}/dia">
-    <input type="hidden" name="month" value="${esc(month)}">
+    ${camposPeriodo(periodo)}
     <div class="row">
       <div class="field">
         <label for="dia">Día</label>
@@ -218,7 +234,7 @@ function formularioEdicion(e, esIngreso, diasAjustados, month, hoy) {
   </form>
   ${
     diasAjustados.length === 0
-      ? `<p class="sub">Todos los días de ${esc(monthLabel(month))} van a ${money(e.amount_cents)}.</p>`
+      ? `<p class="sub">Todos los días de ${esc(periodo.label)} van a ${money(e.amount_cents)}.</p>`
       : `<div class="table-wrap"><table>
       <thead><tr><th>Día</th><th class="num">Importe</th><th></th></tr></thead>
       <tbody>
@@ -229,7 +245,7 @@ function formularioEdicion(e, esIngreso, diasAjustados, month, hoy) {
           <td class="num">${money(d.amount_cents)}</td>
           <td class="right">
             <form method="post" action="/admin/caja/${e.id}/dia" class="inline">
-              <input type="hidden" name="month" value="${esc(month)}">
+              ${camposPeriodo(periodo)}
               <input type="hidden" name="day" value="${esc(d.day)}">
               <input type="hidden" name="quitar" value="1">
               <button class="btn ghost small" type="submit">Volver al normal</button>
@@ -300,10 +316,9 @@ function listaMovimientos(filas, direction) {
 }
 
 /** Quién carga con qué parte de la publicidad. Los porcentajes los pone el jefe. */
-function tarjetaReparto(workers, inversionCents, reparto, month, otrosGastos, corte, enCurso) {
+function tarjetaReparto(workers, inversionCents, reparto, periodo, otrosGastos, hasta) {
   const suma = reparto.sumaPercent;
   const fmt = (n) => String(Number(n) % 1 === 0 ? n : n.toFixed(1)).replace('.', ',');
-  const hasta = corte ? `hasta el ${formatDateShort(corte)}` : 'hasta hoy';
 
   return `<div class="card">
   <h2>Reparto del marketing</h2>
@@ -315,7 +330,7 @@ function tarjetaReparto(workers, inversionCents, reparto, month, otrosGastos, co
     workers.length === 0
       ? emptyState('Da de alta trabajadores para poder repartir.')
       : `<form method="post" action="/admin/caja/reparto">
-    <input type="hidden" name="month" value="${esc(month)}">
+    ${camposPeriodo(periodo)}
     <div class="table-wrap"><table>
       <thead><tr>
         <th>Trabajador</th>
@@ -397,8 +412,8 @@ function tarjetaReparto(workers, inversionCents, reparto, month, otrosGastos, co
       <tr><td>Resto de gastos ${esc(hasta)}</td>
           <td class="num">${money(otrosGastos.totalCents)}</td></tr>
       ${
-        enCurso
-          ? `<tr><td class="muted">Si acabara ${esc(monthLabel(month))}</td>
+        periodo.enCurso
+          ? `<tr><td class="muted">Si acabara ${esc(periodo.label)}</td>
              <td class="num muted">${money(otrosGastos.mesCents)}</td></tr>`
           : ''
       }
@@ -408,22 +423,6 @@ function tarjetaReparto(workers, inversionCents, reparto, month, otrosGastos, co
   </table></div>`
   }
 </div>`;
-}
-
-function monthPickerCaja(month) {
-  return `<form method="get" action="/admin/caja" class="card" style="padding:12px 14px">
-  <div class="row">
-    <div style="flex:1 1 220px">
-      <label for="month">Mes</label>
-      <select id="month" name="month" onchange="this.form.submit()">
-        ${recentMonths()
-          .map((m) => `<option value="${m}" ${m === month ? 'selected' : ''}>${esc(monthLabel(m))}</option>`)
-          .join('')}
-      </select>
-    </div>
-    <div style="flex:0 0 auto"><button class="btn ghost" type="submit">Ver</button></div>
-  </div>
-</form>`;
 }
 
 module.exports = { adminCaja };

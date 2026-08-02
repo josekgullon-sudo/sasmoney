@@ -104,7 +104,6 @@ h1 { font-size: 1.35rem; margin: 4px 0 14px; }
 .muted { color: var(--ink-soft); }
 .small { font-size: .85rem; }
 .nowrap { white-space: nowrap; }
-.only-narrow { display: none; }
 
 /* Ficha de trabajador para el móvil, donde una tabla de 7 columnas no cabe. */
 .wcard { border: 1px solid var(--line); border-radius: 12px; padding: 13px; margin-bottom: 10px; }
@@ -167,19 +166,27 @@ input:focus, select:focus, textarea:focus {
 .btn.danger:hover { background: #90170f; }
 .btn.small { padding: 8px 12px; font-size: .85rem; }
 
-/* Botones rápidos de importe */
+/* Botones rápidos de importe y de periodo */
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .chip {
+  display: inline-block;
   border: 1px solid var(--line);
   background: #fff;
   border-radius: 999px;
   padding: 8px 14px;
   font: inherit;
   font-size: .9rem;
+  line-height: 1.2;
+  color: var(--ink);
+  text-decoration: none;
   cursor: pointer;
 }
 .chip:hover { background: var(--brand-soft); border-color: var(--brand); }
 .chip.is-on { background: var(--brand); border-color: var(--brand); color: #fff; }
+.chip.is-on:hover { background: var(--brand); color: #fff; }
+
+/* El selector de periodo lleva varios formularios dentro de la misma tarjeta. */
+.period form { margin: 0; }
 
 /* ---------- Cifras ---------- */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
@@ -265,13 +272,22 @@ details.box > *:not(summary) { margin-top: 10px; }
 
 @media (max-width: 560px) {
   .who { display: none; }
-  /* En el móvil no cabe todo: se esconde lo accesorio antes que recortar cifras. */
-  .hide-narrow { display: none; }
-  .only-narrow { display: block; }
-  .wide-only { display: none; }
   .card { padding: 15px; }
   .stat .v { font-size: 1.3rem; }
   th, td { padding: 10px 8px; }
+}
+
+/* ---------- Qué se ve en cada ancho ----------
+   Estas reglas sólo esconden, nunca imponen un display: así, al mostrarse, cada
+   elemento recupera el suyo (una fila sigue siendo flex y una tabla, tabla).
+   Van al final para ganarle a los display de cada componente. */
+@media (min-width: 561px) {
+  .only-narrow { display: none; }
+}
+@media (max-width: 560px) {
+  /* En el móvil no cabe todo: se esconde lo accesorio antes que recortar cifras. */
+  .hide-narrow { display: none; }
+  .wide-only { display: none; }
 }
 
 @media print {

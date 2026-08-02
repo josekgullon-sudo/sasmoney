@@ -3,7 +3,13 @@
 const { esc, formatDate, formatDateShort, monthLabel, recentMonths } = require('../util');
 const { ruleLabel } = require('../commission');
 const { layout } = require('./layout');
-const { stats, money, emptyState } = require('./common');
+const { stats, money, emptyState, periodPicker } = require('./common');
+
+/** 'agosto 2026' → 'Agosto 2026'. Para los títulos. */
+function primeraMayuscula(texto) {
+  const s = String(texto || '');
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 
 const PAYMENT_METHODS = [
   ['efectivo', 'Efectivo'],
@@ -133,8 +139,9 @@ function entryItem(e, { showWorker = false } = {}) {
  * Antes esto estaba partido en dos pantallas que enseñaban casi lo mismo.
  */
 function workerAccount({
-  user, flash, warning, month, entries, totalCents, calc, pendingCents, settlements, historial,
+  user, flash, warning, periodo, entries, totalCents, calc, pendingCents, settlements, historial,
 }) {
+  const month = periodo.month;
   const byDate = new Map();
   for (const e of entries) {
     if (!byDate.has(e.service_date)) byDate.set(e.service_date, []);
@@ -144,8 +151,8 @@ function workerAccount({
   const maxHistorial = Math.max(1, ...historial.map((h) => h.commissionCents));
 
   const body = `
-<h1>Mis cuentas</h1>
-${monthPicker('/mis-cuentas', month)}
+<h1>Mis cuentas · ${esc(primeraMayuscula(periodo.label))}</h1>
+${periodPicker('/mis-cuentas', periodo)}
 
 ${stats([
   { k: 'Facturado', v: money(totalCents), sub: `${entries.length} servicio(s)` },
@@ -161,7 +168,7 @@ ${stats([
         ${calc.breakdown
           .map((b) => `<tr><td>${esc(b.concept)}</td><td class="num">${money(b.amountCents)}</td></tr>`)
           .join('')}
-        <tr><td><strong>Total de ${esc(monthLabel(month))}</strong></td>
+        <tr><td><strong>Total de ${esc(periodo.label)}</strong></td>
             <td class="num"><strong>${money(calc.commissionCents)}</strong></td></tr>
       </tbody>
     </table>
@@ -203,10 +210,10 @@ ${stats([
 </div>
 
 <div class="card">
-  <h2>Lo que has apuntado en ${esc(monthLabel(month))}</h2>
+  <h2>Lo que has apuntado en ${esc(periodo.label)}</h2>
   ${
     entries.length === 0
-      ? emptyState('No hay servicios en este mes.')
+      ? emptyState('No hay servicios en este periodo.')
       : [...byDate.entries()]
           .map(
             ([date, list]) => `<details class="box" ${date === entries[0].service_date ? 'open' : ''}>
@@ -264,24 +271,6 @@ function workerEditEntry({ user, flash, warning, entry, today, ahora }) {
   return layout({ title: 'Editar servicio', user, body, active: 'servicios', flash, warning });
 }
 
-/** Selector de mes reutilizable. */
-function monthPicker(action, month, extra = '') {
-  return `<form method="get" action="${action}" class="card" style="padding:12px 14px">
-  <div class="row">
-    <div style="flex:1 1 200px">
-      <label for="month">Mes</label>
-      <select id="month" name="month" onchange="this.form.submit()">
-        ${recentMonths()
-          .map((m) => `<option value="${m}" ${m === month ? 'selected' : ''}>${esc(monthLabel(m))}</option>`)
-          .join('')}
-      </select>
-    </div>
-    ${extra}
-    <div style="flex:0 0 auto"><button class="btn ghost" type="submit">Ver</button></div>
-  </div>
-</form>`;
-}
-
 module.exports = {
   PAYMENT_METHODS,
   metodoLegible,
@@ -289,6 +278,5 @@ module.exports = {
   workerAccount,
   workerEditEntry,
   entryItem,
-  monthPicker,
   quickForm,
 };

@@ -1,6 +1,7 @@
 'use strict';
 
-const { esc, BRAND } = require('../util');
+const { esc, BRAND, monthLabel, recentMonths } = require('../util');
+const { ATAJO_LABELS, ATAJOS_RAPIDOS, atajoActivo } = require('../period');
 const { asset } = require('../assets');
 const { formatEuro } = require('../commission');
 const { layout } = require('./layout');
@@ -88,8 +89,85 @@ function money(cents) {
   return formatEuro(cents);
 }
 
+/**
+ * Elegir qué trozo de tiempo se mira: un atajo, un mes entero o dos fechas.
+ *
+ * Son tres formularios sueltos a propósito. Si fueran uno solo, al elegir un mes
+ * viajarían también las fechas de abajo y no se sabría cuál manda; así cada
+ * manera de pedir el periodo va por su lado y siempre gana la que has tocado.
+ *
+ * @param {string} action  A dónde se envía ('/admin', '/admin/servicios'…).
+ * @param {object} periodo Lo que devuelve resolvePeriod().
+ * @param {object} extra   Otros filtros que hay que conservar (trabajador…).
+ */
+function periodPicker(action, periodo, extra = {}) {
+  const ocultos = Object.entries(extra)
+    .filter(([, v]) => v !== null && v !== undefined && v !== '')
+    .map(([k, v]) => `<input type="hidden" name="${esc(k)}" value="${esc(v)}">`)
+    .join('');
+
+  const enlace = (params) => {
+    const q = new URLSearchParams({ ...limpio(extra), ...params }).toString();
+    return `${action}?${q}`;
+  };
+
+  // Si lo que se está viendo no es ninguno de los atajos, el cajón de fechas se
+  // abre solo: es la única forma de ver cuál es el periodo elegido.
+  const activo = atajoActivo(periodo);
+
+  return `<div class="card period" style="padding:12px 14px">
+  <div class="chips" style="margin-top:0">
+    ${ATAJOS_RAPIDOS.map(
+      (a) =>
+        `<a class="chip ${activo === a ? 'is-on' : ''}" href="${esc(enlace({ p: a }))}">${esc(
+          ATAJO_LABELS[a]
+        )}</a>`
+    ).join('')}
+  </div>
+  <details class="box" style="margin-top:12px" ${activo ? '' : 'open'}>
+    <summary>Otro mes, un día suelto o entre dos fechas</summary>
+    <div class="row">
+      <form method="get" action="${esc(action)}" style="flex:1 1 190px">
+        ${ocultos}
+        <label for="pp_month">Un mes entero</label>
+        <select id="pp_month" name="month" onchange="this.form.submit()">
+          ${recentMonths()
+            .map(
+              (m) =>
+                `<option value="${m}" ${m === periodo.month ? 'selected' : ''}>${esc(monthLabel(m))}</option>`
+            )
+            .join('')}
+        </select>
+      </form>
+      <form method="get" action="${esc(action)}" class="row" style="flex:2 1 330px;gap:10px">
+        ${ocultos}
+        <div style="flex:1 1 130px">
+          <label for="pp_from">Desde el día</label>
+          <input id="pp_from" name="from" type="date" value="${esc(periodo.from)}">
+        </div>
+        <div style="flex:1 1 130px">
+          <label for="pp_to">Hasta el día</label>
+          <input id="pp_to" name="to" type="date" value="${esc(periodo.to)}">
+        </div>
+        <div style="flex:0 0 auto;align-self:end;margin-bottom:14px">
+          <button class="btn" type="submit">Ver</button>
+        </div>
+      </form>
+    </div>
+    <div class="hint">Para ver <strong>un solo día</strong>, pon esa fecha en "Desde" y deja "Hasta" vacío.</div>
+  </details>
+</div>`;
+}
+
+/** Quita del objeto lo que no tiene valor, para no ensuciar las direcciones. */
+function limpio(obj) {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, v]) => v !== null && v !== undefined && v !== '')
+  );
+}
+
 function emptyState(text) {
   return `<div class="empty">${esc(text)}</div>`;
 }
 
-module.exports = { loginPage, accountPage, stats, money, emptyState };
+module.exports = { loginPage, accountPage, stats, money, emptyState, periodPicker };

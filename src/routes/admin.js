@@ -10,17 +10,8 @@ const {
   formatEuro,
   COMMISSION_TYPES,
 } = require('../commission');
-const {
-  todayISO,
-  nowHM,
-  isValidTime,
-  currentMonth,
-  monthRange,
-  monthCutoff,
-  monthInProgress,
-  isValidDate,
-  formatDate,
-} = require('../util');
+const { todayISO, nowHM, isValidTime, isValidDate, formatDate } = require('../util');
+const { resolvePeriod, periodQuery } = require('../period');
 const expenses = require('../expenses');
 const investment = require('../investment');
 const cajaViews = require('../views/caja');
@@ -35,8 +26,8 @@ const METHODS = PAYMENT_METHODS.map(([v]) => v);
 /* ------------------------------------------------------------------ Resumen */
 
 router.get('/', (req, res) => {
-  const month = validMonth(req.query.month);
-  const { from, to } = monthRange(month);
+  const periodo = resolvePeriod(req.query);
+  const { from, to } = periodo;
 
   // Se incluyen todos los trabajadores en activo, hayan facturado o no: los
   // gastos generales se reparten entre todos y la cuenta tiene que cuadrar.
@@ -61,8 +52,8 @@ router.get('/', (req, res) => {
     { count: 0, totalCents: 0, commissionCents: 0 }
   );
 
-  const gastosMes = expenses.monthSummary(month, 'out');
-  const ingresosMes = expenses.monthSummary(month, 'in');
+  const gastosMes = expenses.rangeSummary({ from, to, direction: 'out' });
+  const ingresosMes = expenses.rangeSummary({ from, to, direction: 'in' });
 
   const ordenadas = base.sort((a, b) => b.totalCents - a.totalCents);
 
@@ -90,10 +81,7 @@ router.get('/', (req, res) => {
       user: req.user,
       flash: res.locals.flash,
       warning: res.locals.warning,
-      month,
-      // Hasta qué día van las cuentas y si el mes sigue corriendo.
-      corte: monthCutoff(month),
-      enCurso: monthInProgress(month),
+      periodo,
       rows,
       totals,
       pendingTotalCents: rows.reduce((a, r) => a + r.pendingCommissionCents, 0),
@@ -114,29 +102,14 @@ router.get('/', (req, res) => {
 
 // La rentabilidad ya vive dentro del resumen.
 router.get('/rentabilidad', (req, res) => {
-  const q = req.query.month ? `?month=${encodeURIComponent(String(req.query.month))}` : '';
-  res.redirect(`/admin${q}`);
+  res.redirect(`/admin?${periodQuery(resolvePeriod(req.query))}`);
 });
 
 /* ------------------------------------------------------------- Liquidación */
 
-/** Resuelve el periodo pedido: un mes completo o dos fechas sueltas. */
-function resolvePeriod(query) {
-  const monthParam = String(query.month || '');
-  const fromParam = String(query.from || '');
-  const toParam = String(query.to || '');
-
-  if (!monthParam && isValidDate(fromParam) && isValidDate(toParam)) {
-    return fromParam <= toParam
-      ? { from: fromParam, to: toParam, month: '' }
-      : { from: toParam, to: fromParam, month: '' };
-  }
-  const month = validMonth(monthParam);
-  return { ...monthRange(month), month };
-}
-
 router.get('/liquidacion', (req, res) => {
-  const { from, to, month } = resolvePeriod(req.query);
+  const periodo = resolvePeriod(req.query);
+  const { from, to } = periodo;
   const onlyPending = readOnlyPending(req.query);
   const workerId = req.query.worker ? Number(req.query.worker) : null;
   const worker = workerId ? repo.getUser(workerId) : null;
@@ -166,9 +139,9 @@ router.get('/liquidacion', (req, res) => {
       user: req.user,
       flash: res.locals.flash,
       warning: res.locals.warning,
+      periodo,
       from,
       to,
-      month,
       onlyPending,
       rows,
       totals,
@@ -383,15 +356,10 @@ router.post('/trabajadores/:id/sesiones', (req, res) => {
 /* ---------------------------------------------------------------- Servicios */
 
 router.get('/servicios', (req, res) => {
-  const month = validMonth(req.query.month);
-  const { from, to } = monthRange(month);
+  const periodo = resolvePeriod(req.query);
   const worker = req.query.worker ? Number(req.query.worker) : null;
 
-  const entries = repo.listEntries({ userId: worker || null, from, to });
-  const qs = new URLSearchParams({
-    month,
-    ...(worker ? { worker: String(worker) } : {}),
-  }).toString();
+  const entries = repo.listEntries({ userId: worker || null, from: periodo.from, to: periodo.to });
 
   res.send(
     views.adminEntries({
@@ -400,7 +368,8 @@ router.get('/servicios', (req, res) => {
       warning: res.locals.warning,
       entries,
       workers: repo.listWorkers({ includeInactive: true }),
-      filters: { month, worker, qs },
+      periodo,
+      filters: { worker, qs: periodQuery(periodo, { worker }) },
       totalCents: entries.reduce((a, e) => a + e.amount_cents, 0),
       today: todayISO(),
       ahora: nowHM(),
@@ -409,8 +378,8 @@ router.get('/servicios', (req, res) => {
 });
 
 router.get('/servicios.csv', (req, res) => {
-  const month = validMonth(req.query.month);
-  const { from, to } = monthRange(month);
+  const periodo = resolvePeriod(req.query);
+  const { from, to } = periodo;
   const entries = repo.listEntries({
     userId: req.query.worker ? Number(req.query.worker) : null,
     from,
@@ -430,7 +399,7 @@ router.get('/servicios.csv', (req, res) => {
       e.settlement_id ? 'Sí' : 'No',
     ]);
   }
-  sendCsv(res, `servicios_${month}.csv`, lines);
+  sendCsv(res, `servicios_${from}_${to}.csv`, lines);
 });
 
 router.post('/servicios', (req, res) => {
@@ -533,10 +502,11 @@ function readMovementForm(body) {
 }
 
 router.get('/caja', (req, res) => {
-  const month = validMonth(req.query.month);
+  const periodo = resolvePeriod(req.query);
+  const { from, to } = periodo;
 
-  const conMes = (direction) => {
-    const resumen = expenses.monthSummary(month, direction);
+  const delPeriodo = (direction) => {
+    const resumen = expenses.rangeSummary({ from, to, direction });
     const porId = new Map(resumen.rows.map((g) => [g.id, g]));
     return {
       ...resumen,
@@ -546,10 +516,9 @@ router.get('/caja', (req, res) => {
     };
   };
 
-  const gastos = conMes('out');
-  const ingresos = conMes('in');
+  const gastos = delPeriodo('out');
+  const ingresos = delPeriodo('in');
 
-  const { from, to } = monthRange(month);
   const servicios = repo.settlementRows({ from, to, pendingOnly: false });
   const facturadoCents = servicios.reduce((a, r) => a + r.totalCents, 0);
   const comisionesCents = servicios.reduce((a, r) => a + r.calc.commissionCents, 0);
@@ -568,10 +537,8 @@ router.get('/caja', (req, res) => {
       user: req.user,
       flash: res.locals.flash,
       warning: res.locals.warning,
-      month,
+      periodo,
       hoy: todayISO(),
-      corte: monthCutoff(month),
-      enCurso: monthInProgress(month),
       gastos,
       ingresos,
       totales: {
@@ -583,7 +550,7 @@ router.get('/caja', (req, res) => {
         quedaCents: facturadoCents + ingresos.hastaHoyCents - comisionesCents - gastos.hastaHoyCents,
       },
       editando,
-      diasAjustados: editando ? expenses.listDayAmounts(editando.id, month) : [],
+      diasAjustados: editando ? expenses.listDayAmounts(editando.id, from, to) : [],
       workers,
       reparto: investment.split(gastos.inversion.hastaHoyCents, filasReparto),
       otrosGastos: {
@@ -613,15 +580,20 @@ router.post('/caja', (req, res) => {
 });
 
 router.post('/caja/reparto', (req, res) => {
-  const month = validMonth(req.body.month);
+  const periodo = resolvePeriod(req.body);
+  const volver = `/admin/caja?${periodQuery(periodo)}`;
 
-  // El atajo rellena los porcentajes con lo que ha facturado cada uno este mes.
+  // El atajo rellena los porcentajes con lo que ha facturado cada uno.
   if (req.body.segun_facturacion) {
-    const { from, to } = monthRange(month);
-    const filas = repo.settlementRows({ from, to, pendingOnly: false, includeEmpty: true });
+    const filas = repo.settlementRows({
+      from: periodo.from,
+      to: periodo.to,
+      pendingOnly: false,
+      includeEmpty: true,
+    });
     investment.setShares(investment.sharesFromBilling(filas));
-    res.flash('ok', 'Porcentajes calculados con lo facturado este mes. Cámbialos si quieres.');
-    return res.redirect(`/admin/caja?month=${month}`);
+    res.flash('ok', `Porcentajes calculados con lo facturado ${periodo.label}. Cámbialos si quieres.`);
+    return res.redirect(volver);
   }
 
   const ids = [].concat(req.body.worker_id || []);
@@ -634,7 +606,7 @@ router.post('/caja/reparto', (req, res) => {
   );
 
   res.flash('ok', 'Porcentajes guardados. Se aplican a partir de ahora en todos los meses.');
-  res.redirect(`/admin/caja?month=${month}`);
+  res.redirect(volver);
 });
 
 router.post('/caja/:id', (req, res) => {
@@ -660,9 +632,8 @@ router.post('/caja/:id/dia', (req, res) => {
   const mov = expenses.getExpense(Number(req.params.id));
   if (!mov) return res.status(404).send('No encontrado.');
 
-  const month = validMonth(req.body.month);
   const day = String(req.body.day || '').trim();
-  const volver = `/admin/caja?editar=${mov.id}&month=${month}`;
+  const volver = `/admin/caja?${periodQuery(resolvePeriod(req.body), { editar: mov.id })}`;
 
   if (!isValidDate(day)) {
     res.flash('error', 'La fecha no es válida.');
@@ -696,8 +667,7 @@ router.post('/caja/:id/borrar', (req, res) => {
 
 // Las pantallas separadas de antes llevan a la nueva.
 router.get(['/gastos', '/ingresos'], (req, res) => {
-  const q = req.query.month ? `?month=${encodeURIComponent(String(req.query.month))}` : '';
-  res.redirect(`/admin/caja${q}`);
+  res.redirect(`/admin/caja?${periodQuery(resolvePeriod(req.query))}`);
 });
 
 /* ------------------------------------------------------------------ Ayudas */
@@ -733,11 +703,6 @@ function readOnlyPending(query) {
   if (raw === undefined) return true;
   const value = Array.isArray(raw) ? raw[raw.length - 1] : raw;
   return String(value) === '1';
-}
-
-function validMonth(value) {
-  const m = String(value || '');
-  return /^\d{4}-(0[1-9]|1[0-2])$/.test(m) ? m : currentMonth();
 }
 
 /** Importe en formato español, listo para abrir el CSV con Excel. */

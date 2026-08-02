@@ -1,15 +1,32 @@
 'use strict';
 
-const { esc, formatDate, formatDateShort, formatStamp, monthLabel, recentMonths } = require('../util');
+const { esc, formatDate, formatDateShort, formatStamp } = require('../util');
+const { periodQuery, rangeLabel } = require('../period');
 const { ruleLabel, parseTiers } = require('../commission');
 const { layout } = require('./layout');
-const { stats, money, emptyState } = require('./common');
+const { stats, money, emptyState, periodPicker } = require('./common');
 const { PAYMENT_METHODS, metodoLegible } = require('./worker');
 
+/** 'agosto 2026' → 'Agosto 2026'. Para los títulos. */
+function primeraMayuscula(texto) {
+  const s = String(texto || '');
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** El periodo escondido dentro de otro formulario, para no perderlo al filtrar. */
+function camposPeriodo(periodo) {
+  return periodo.month
+    ? `<input type="hidden" name="month" value="${esc(periodo.month)}">`
+    : `<input type="hidden" name="from" value="${esc(periodo.from)}">
+       <input type="hidden" name="to" value="${esc(periodo.to)}">`;
+}
+
 function adminHome({
-  user, flash, warning, month, corte, enCurso, rows, totals, pendingTotalCents,
+  user, flash, warning, periodo, rows, totals, pendingTotalCents,
   gastos, ingresos, inversion, inversionSinAsignarCents, otrosGastos, trabajadoresActivos,
 }) {
+  const { corte, enCurso } = periodo;
+  const q = periodQuery(periodo);
   // Todo lo que se enseña va del día 1 al día de hoy. La previsión del mes
   // entero se ve al lado, para que se distinga lo gastado de lo que falta.
   const quedaHoyCents =
@@ -19,14 +36,18 @@ function adminHome({
 
   const pct = (parte, todo) => (todo > 0 ? (parte / todo) * 100 : 0);
   const fmtPct = (n) => `${n.toFixed(1).replace('.', ',')} %`;
-  const periodo = corte
-    ? `Del 1 al ${esc(formatDateShort(corte))}`
-    : 'Este mes todavía no ha empezado';
 
   const body = `
-<h1>Resumen de ${esc(monthLabel(month))}</h1>
-<p class="sub">${periodo}. Todas las cifras son <strong>lo que llevas hasta hoy</strong>, no el mes entero.</p>
-${monthForm('/admin', month)}
+<h1>Resumen · ${esc(primeraMayuscula(periodo.label))}</h1>
+<p class="sub">${
+    periodo.esUnDia
+      ? `Lo de ${esc(periodo.label)}, ${esc(formatDate(periodo.from))}.`
+      : corte
+        ? `${esc(primeraMayuscula(rangeLabel(periodo.from, corte)))}. Las cifras son
+           <strong>lo que llevas hasta hoy</strong>, no el periodo entero.`
+        : 'Este periodo todavía no ha empezado.'
+  }</p>
+${periodPicker('/admin', periodo)}
 
 ${stats([
   { k: 'Entra', v: money(totals.totalCents + ingresos.hastaHoyCents), sub: `${totals.count} servicio(s)` },
@@ -41,17 +62,17 @@ ${stats([
 
 <div class="card" style="margin-top:16px">
   <h2>Cada trabajador</h2>
-  <p class="sub">Lo que factura, lo que se lleva, el marketing que carga y lo que deja,
-     del 1 ${corte ? `al ${esc(formatDateShort(corte))}` : 'en adelante'}.</p>
+  <p class="sub">Lo que factura, lo que se lleva, el marketing que carga y lo que deja
+     ${esc(rangeLabel(periodo.from, corte))}.</p>
   ${
     rows.length === 0
-      ? emptyState('Nadie ha apuntado nada este mes.')
+      ? emptyState('Nadie ha apuntado nada en este periodo.')
       : `${rows
           .map(
             (r) => `<div class="wcard only-narrow">
       <div class="top">
         <div>
-          <div class="name"><a href="/admin/servicios?worker=${r.user.id}&month=${esc(month)}">${esc(
+          <div class="name"><a href="/admin/servicios?worker=${r.user.id}&amp;${esc(q)}">${esc(
               r.user.name
             )}</a></div>
           <div class="small muted">${esc(ruleLabel(r.user))}</div>
@@ -74,7 +95,7 @@ ${stats([
         )}</strong></div>
         ${
           r.pendingCommissionCents > 0
-            ? `<a class="btn small" href="/admin/liquidacion?month=${esc(month)}&worker=${r.user.id}">Liquidar</a>`
+            ? `<a class="btn small" href="/admin/liquidacion?worker=${r.user.id}&amp;${esc(q)}">Liquidar</a>`
             : '<span class="pill ok">Al día</span>'
         }
       </div>
@@ -89,14 +110,13 @@ ${stats([
       <th class="num">Marketing</th>
       <th class="num hide-narrow">Resto de gastos</th>
       <th class="num">Deja</th>
-      <th class="num hide-narrow">Margen</th>
       <th class="num">A liquidar</th>
     </tr></thead>
     <tbody>
       ${rows
         .map(
           (r) => `<tr>
-        <td class="nowrap"><a href="/admin/servicios?worker=${r.user.id}&month=${esc(month)}">${esc(
+        <td class="nowrap"><a href="/admin/servicios?worker=${r.user.id}&amp;${esc(q)}">${esc(
             r.user.name
           )}</a><div class="small muted hide-narrow">${esc(ruleLabel(r.user))}</div></td>
         <td class="num">${money(r.totalCents)}<div class="small muted">${r.count} serv.</div></td>
@@ -106,13 +126,13 @@ ${stats([
         <td class="num hide-narrow">${money(r.gastosGeneralesCents)}</td>
         <td class="num"><strong style="color:${
           r.beneficioCents < 0 ? 'var(--danger)' : 'inherit'
-        }">${money(r.beneficioCents)}</strong></td>
-        <td class="num hide-narrow muted">${esc(fmtPct(pct(r.beneficioCents, r.totalCents)))}</td>
+        }">${money(r.beneficioCents)}</strong>
+          <div class="small muted">${esc(fmtPct(pct(r.beneficioCents, r.totalCents)))}</div></td>
         <td class="num nowrap">
           <strong>${money(r.pendingCommissionCents)}</strong>
           <div style="margin-top:5px">${
             r.pendingCommissionCents > 0
-              ? `<a class="btn small" href="/admin/liquidacion?month=${esc(month)}&worker=${r.user.id}">Liquidar</a>`
+              ? `<a class="btn small" href="/admin/liquidacion?worker=${r.user.id}&amp;${esc(q)}">Liquidar</a>`
               : '<span class="pill ok">Al día</span>'
           }</div>
         </td>
@@ -128,7 +148,6 @@ ${stats([
         <div class="small muted">${money(rows.reduce((a, r) => a + r.inversionCents, 0))}</div></td>
       <td class="num hide-narrow">${money(rows.reduce((a, r) => a + r.gastosGeneralesCents, 0))}</td>
       <td class="num">${money(rows.reduce((a, r) => a + r.beneficioCents, 0))}</td>
-      <td class="num hide-narrow"></td>
       <td class="num">${money(pendingTotalCents)}</td>
     </tr></tfoot>
   </table></div>`
@@ -136,12 +155,12 @@ ${stats([
   <details class="box">
     <summary>Qué significa cada columna</summary>
     <p class="small"><strong>Marketing</strong>: el porcentaje de la publicidad que le has asignado
-       y, debajo, lo que eso supone en euros <strong>del 1 ${
-         corte ? `al ${esc(formatDateShort(corte))}` : 'de mes'
-       }</strong>. De la publicidad de todo el mes (${money(
+       y, debajo, lo que eso supone en euros <strong>${
+         corte ? esc(rangeLabel(periodo.from, corte)) : 'en este periodo'
+       }</strong>. De la publicidad de todo el periodo (${money(
     inversion.totalCents
   )}) van gastados ${money(inversion.hastaHoyCents)}. Los porcentajes se cambian en
-       <a href="/admin/caja">Caja</a>.${
+       <a href="/admin/caja?${esc(q)}">Caja</a>.${
          inversionSinAsignarCents > 0
            ? ` Quedan ${money(inversionSinAsignarCents)} sin asignar a nadie: los paga la empresa.`
            : ''
@@ -157,13 +176,13 @@ ${stats([
 </div>
 
 <div class="card">
-  <h2>Cómo va el mes</h2>
+  <h2>Cómo va ${esc(periodo.label)}</h2>
   <div class="table-wrap">
     <table>
       <thead><tr>
         <th></th>
         <th class="num">Hasta hoy</th>
-        ${enCurso ? '<th class="num hide-narrow">Si acabara el mes</th>' : ''}
+        ${enCurso ? '<th class="num hide-narrow">Si acabara el periodo</th>' : ''}
       </tr></thead>
       <tbody>
         ${filaMes('Facturado por todos', totals.totalCents, totals.totalCents, enCurso)}
@@ -195,9 +214,9 @@ ${stats([
   </div>
   ${
     enCurso
-      ? `<p class="sub" style="margin-top:12px">De aquí a fin de mes quedan por caer
+      ? `<p class="sub" style="margin-top:12px">De aquí al final del periodo quedan por caer
          <strong>${money(gastos.pendientesCents)}</strong> de gastos. Si no entrara nada más,
-         el mes acabaría en <strong>${money(
+         el periodo acabaría en <strong>${money(
            quedaMesCents
          )}</strong>. Lo que vale hoy es la primera cifra.</p>`
       : ''
@@ -210,8 +229,8 @@ ${stats([
       : ''
   }
   <div class="actions" style="margin-top:6px">
-    <a class="btn" href="/admin/liquidacion?month=${esc(month)}">Pagar a los trabajadores</a>
-    <a class="btn ghost" href="/admin/caja?month=${esc(month)}">Gastos e ingresos</a>
+    <a class="btn" href="/admin/liquidacion?${esc(q)}">Pagar a los trabajadores</a>
+    <a class="btn ghost" href="/admin/caja?${esc(q)}">Gastos e ingresos</a>
   </div>
 </div>`;
 
@@ -227,18 +246,24 @@ function filaMes(concepto, hastaHoyCents, mesCents, enCurso, signo = '') {
   </tr>`;
 }
 
-function adminSettlement({ user, flash, warning, from, to, month, onlyPending, rows, totals, history, workers, workerId }) {
+function adminSettlement({ user, flash, warning, periodo, from, to, onlyPending, rows, totals, history, workers, workerId }) {
   const elegida = workerId ? workers.find((w) => w.id === workerId) : null;
   const body = `
 <h1>Liquidación${elegida ? ` de ${esc(elegida.name)}` : ''}</h1>
 <p class="sub">Elige el trabajador y el periodo: te dice exactamente cuánto le tienes que pagar.
    Cuando le pagues, pulsa <strong>Liquidado</strong> y su cuenta vuelve a cero.</p>
 
+${periodPicker('/admin/liquidacion', periodo, {
+  worker: workerId || '',
+  only_pending: onlyPending ? '1' : '0',
+})}
+
 <form method="get" action="/admin/liquidacion" class="card">
+  ${camposPeriodo(periodo)}
   <div class="row">
-    <div>
+    <div style="flex:1 1 200px">
       <label for="worker">Trabajador</label>
-      <select id="worker" name="worker">
+      <select id="worker" name="worker" onchange="this.form.submit()">
         <option value="">Todos</option>
         ${workers
           .map(
@@ -247,23 +272,6 @@ function adminSettlement({ user, flash, warning, from, to, month, onlyPending, r
           )
           .join('')}
       </select>
-    </div>
-    <div>
-      <label for="month">Mes completo</label>
-      <select id="month" name="month">
-        <option value="">— Fechas sueltas —</option>
-        ${recentMonths()
-          .map((m) => `<option value="${m}" ${m === month ? 'selected' : ''}>${esc(monthLabel(m))}</option>`)
-          .join('')}
-      </select>
-    </div>
-    <div>
-      <label for="from">Desde</label>
-      <input id="from" name="from" type="date" value="${esc(from)}">
-    </div>
-    <div>
-      <label for="to">Hasta</label>
-      <input id="to" name="to" type="date" value="${esc(to)}">
     </div>
   </div>
   <div class="field" style="margin-top:10px">
@@ -561,23 +569,18 @@ ${
   });
 }
 
-function adminEntries({ user, flash, warning, entries, workers, filters, totalCents, today, ahora }) {
+function adminEntries({ user, flash, warning, entries, workers, periodo, filters, totalCents, today, ahora }) {
   const body = `
-<h1>Servicios</h1>
+<h1>Servicios · ${esc(primeraMayuscula(periodo.label))}</h1>
 
-<form method="get" action="/admin/servicios" class="card">
+${periodPicker('/admin/servicios', periodo, { worker: filters.worker || '' })}
+
+<form method="get" action="/admin/servicios" class="card" style="padding:12px 14px">
+  ${camposPeriodo(periodo)}
   <div class="row">
-    <div>
-      <label for="month">Mes</label>
-      <select id="month" name="month">
-        ${recentMonths()
-          .map((m) => `<option value="${m}" ${m === filters.month ? 'selected' : ''}>${esc(monthLabel(m))}</option>`)
-          .join('')}
-      </select>
-    </div>
-    <div>
+    <div style="flex:1 1 200px">
       <label for="worker">Trabajador</label>
-      <select id="worker" name="worker">
+      <select id="worker" name="worker" onchange="this.form.submit()">
         <option value="">Todos</option>
         ${workers
           .map(
@@ -587,7 +590,7 @@ function adminEntries({ user, flash, warning, entries, workers, filters, totalCe
           .join('')}
       </select>
     </div>
-    <div style="flex:0 0 auto"><button class="btn ghost" type="submit">Filtrar</button></div>
+    <div style="flex:0 0 auto;align-self:end;margin-bottom:14px"><button class="btn ghost" type="submit">Filtrar</button></div>
   </div>
 </form>
 
@@ -755,22 +758,6 @@ function adminEntryForm({ user, flash, warning, entry, workers, today, ahora }) 
   return layout({ title: 'Editar servicio', user, body, active: 'servicios', flash, warning });
 }
 
-
-function monthForm(action, month) {
-  return `<form method="get" action="${action}" class="card" style="padding:12px 14px">
-  <div class="row">
-    <div style="flex:1 1 220px">
-      <label for="month">Mes</label>
-      <select id="month" name="month" onchange="this.form.submit()">
-        ${recentMonths()
-          .map((m) => `<option value="${m}" ${m === month ? 'selected' : ''}>${esc(monthLabel(m))}</option>`)
-          .join('')}
-      </select>
-    </div>
-    <div style="flex:0 0 auto"><button class="btn ghost" type="submit">Ver</button></div>
-  </div>
-</form>`;
-}
 
 module.exports = {
   adminHome,

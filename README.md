@@ -18,20 +18,21 @@ Pensada para usarse desde el móvil: apuntar un cobro son dos toques.
      (*Cliente 1*, *Cliente 2*…). Si quiere, puede poner un nombre o un mote.
    - **La fecha y la hora se ponen solas** con el momento en que lo apunta. Están en
      *Más detalles* por si hay que corregirlas, junto con el método de pago y las notas.
-3. En *Mis cuentas* tiene todo lo suyo en una sola pantalla: lo facturado del mes, lo que
-   lleva ganado, cómo sale esa cuenta, lo que aún le deben, la comparación con los meses
-   anteriores, los servicios apuntados y las liquidaciones que ya le han pagado.
+3. En *Mis cuentas* tiene todo lo suyo en una sola pantalla: lo facturado, lo que lleva
+   ganado, cómo sale esa cuenta, lo que aún le deben, la comparación con los meses
+   anteriores, los servicios apuntados y las liquidaciones que ya le han pagado. Puede mirar
+   el día de hoy, un mes o el trozo de tiempo que quiera.
 
 ### Para el jefe
 
 Cinco pantallas, cada una con una pregunta clara:
 
-- **Resumen** — *¿cómo va el mes?* Todo va **del día 1 hasta hoy**: lo que entra, lo que se
-  llevan ellas, los gastos y lo que queda. Y una fila por trabajador con lo que factura, su
-  comisión, **su porcentaje de marketing** y lo que eso le cuesta hasta hoy, **lo que deja** y lo
-  que le debes, con el botón de liquidar al lado. Al lado de cada cifra tienes la previsión de
-  cómo acabaría el mes si no entrara nada más.
-- **Liquidar** — *¿cuánto le pago a X?* Eliges una trabajadora o todas y el periodo. Cuando le
+- **Resumen** — *¿cómo va?* Todo va **hasta hoy**: lo que entra, lo que se llevan ellas, los
+  gastos y lo que queda. Y una fila por trabajador con lo que factura, su comisión, **su
+  porcentaje de marketing** y lo que eso le cuesta, **lo que deja** y lo que le debes, con el
+  botón de liquidar al lado. Al lado de cada cifra tienes la previsión de cómo acabaría el
+  periodo si no entrara nada más.
+- **Liquidar** — *¿cuánto le pago a X?* Eliges una trabajadora o todas. Cuando le
   pagues, pulsas *Liquidado* y su cuenta de ese periodo vuelve a cero: esos servicios quedan
   cerrados y ya no se cuentan otra vez ni se pueden modificar.
 - **Caja** — *¿qué entra y qué sale por fuera de los servicios?* Gastos e ingresos, sueltos o
@@ -40,6 +41,19 @@ Cinco pantallas, cada una con una pregunta clara:
   iguales.
 - **Servicios** — todos los cobros, con filtros y descarga en CSV.
 - **Trabajadores** — altas, contraseñas y cuánto se lleva cada una.
+
+### El periodo: no sólo por meses
+
+Todas las pantallas (las cinco del jefe y *Mis cuentas* de la trabajadora) miran **el trozo de
+tiempo que tú elijas**, no sólo un mes:
+
+- Los botones rápidos: **Hoy · Ayer · 7 días · 30 días · Este mes · Mes pasado**.
+- Un **mes entero** cualquiera de los últimos trece.
+- **Un día suelto**: pones esa fecha en *Desde* y dejas *Hasta* vacío.
+- **Entre dos fechas** cualesquiera, aunque crucen de un mes a otro.
+
+El periodo elegido te acompaña al saltar de una pantalla a otra, y va en la dirección web, así
+que puedes guardar en favoritos "los últimos 7 días" o "el 14 de julio" y volver cuando quieras.
 
 ## Las tres formas de pagar a una trabajadora
 
@@ -161,10 +175,10 @@ docker run -p 4400:4400 -v sasmoney-data:/data \
   y las siguientes se calculan, así que nunca se acaban ni hay que renovarlos.
 - **La caja del mes** es lo facturado, menos las comisiones, más los otros ingresos, menos
   los gastos.
-- **Las cuentas van del día 1 hasta hoy**, no hasta fin de mes. El día 2, de una publicidad
-  de 20 €/día se han gastado 40 €, no 620 €: enseñar el mes entero desde el día 1 hace
-  parecer que la empresa está en números rojos cuando no lo está. La previsión de fin de mes
-  se ve al lado, en gris, para saber por dónde van los tiros.
+- **Las cuentas van hasta hoy**, no hasta el final del periodo. El día 2 del mes, de una
+  publicidad de 20 €/día se han gastado 40 €, no 620 €: enseñar el mes entero desde el día 1
+  hace parecer que la empresa está en números rojos cuando no lo está. La previsión de cómo
+  acabaría se ve al lado, en gris, para saber por dónde van los tiros.
 - **Un gasto diario cuenta tantas veces como días tenga el mes**: 20 €/día son 620 € en un
   mes de 31 días y 560 € en febrero. Si empieza a mitad de mes, sólo cuentan los días desde
   esa fecha. Y se puede **cambiar el importe de un día suelto** sin tocar los demás, para los
@@ -200,6 +214,7 @@ src/
   commission.js      el motor de cálculo (porcentaje, tramos, fijo)
   repo.js            consultas: servicios, totales, liquidaciones
   util.js            fechas, zona horaria, marca y escapado de HTML
+  period.js          qué trozo de tiempo se mira: un día, un mes o dos fechas
   expenses.js        gastos e ingresos, y cálculo de los que se repiten
   throttle.js        freno contra los intentos de entrada a lo bruto
   routes/            auth.js · worker.js · admin.js

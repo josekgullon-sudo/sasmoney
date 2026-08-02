@@ -5,6 +5,7 @@ const { requireLogin } = require('../auth');
 const repo = require('../repo');
 const { calcCommission, parseAmountToCents, formatEuro } = require('../commission');
 const { todayISO, nowHM, isValidTime, currentMonth, monthRange, recentMonths, isValidDate } = require('../util');
+const { resolvePeriod, periodQuery } = require('../period');
 const views = require('../views/worker');
 const { PAYMENT_METHODS } = require('../views/worker');
 
@@ -141,8 +142,8 @@ router.post('/servicios/:id/borrar', requireLogin, (req, res) => {
 router.get('/mis-cuentas', requireLogin, (req, res) => {
   if (req.user.role === 'admin') return res.redirect('/admin/liquidacion');
 
-  const month = validMonth(req.query.month);
-  const { from, to } = monthRange(month);
+  const periodo = resolvePeriod(req.query);
+  const { from, to } = periodo;
 
   const entries = repo.listEntries({ userId: req.user.id, from, to });
   const totalCents = entries.reduce((a, e) => a + e.amount_cents, 0);
@@ -167,7 +168,7 @@ router.get('/mis-cuentas', requireLogin, (req, res) => {
       user: req.user,
       flash: res.locals.flash,
       warning: res.locals.warning,
-      month,
+      periodo,
       entries,
       totalCents,
       calc,
@@ -180,14 +181,7 @@ router.get('/mis-cuentas', requireLogin, (req, res) => {
 
 // Las direcciones antiguas siguen funcionando, por si alguien las tenía guardadas.
 router.get(['/mis-servicios', '/mis-ganancias'], requireLogin, (req, res) => {
-  const q = req.query.month ? `?month=${encodeURIComponent(String(req.query.month))}` : '';
-  res.redirect(`/mis-cuentas${q}`);
+  res.redirect(`/mis-cuentas?${periodQuery(resolvePeriod(req.query))}`);
 });
-
-/** Un mes con formato correcto, o el actual. */
-function validMonth(value) {
-  const m = String(value || '');
-  return /^\d{4}-(0[1-9]|1[0-2])$/.test(m) ? m : currentMonth();
-}
 
 module.exports = router;

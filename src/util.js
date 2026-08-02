@@ -67,6 +67,19 @@ function monthInProgress(month, hoy = todayISO()) {
   return hoy < to;
 }
 
+/** Suma (o resta, con negativos) días a una fecha ISO. */
+function addDays(iso, days) {
+  const [y, m, d] = String(iso).split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+/** Mes anterior a uno dado: '2026-01' → '2025-12'. */
+function previousMonth(month) {
+  const [y, m] = String(month).split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 2, 1));
+  return `${pad(d.getUTCFullYear(), 4)}-${pad(d.getUTCMonth() + 1, 2)}`;
+}
+
 /** Etiqueta legible de un mes: '2026-07' → 'julio 2026'. */
 function monthLabel(month) {
   const [y, m] = String(month).split('-').map(Number);
@@ -152,6 +165,8 @@ module.exports = {
   monthRange,
   monthCutoff,
   monthInProgress,
+  addDays,
+  previousMonth,
   monthLabel,
   recentMonths,
   formatDate,

@@ -126,3 +126,51 @@ test('el mes se resume separando lo gastado de lo que aún queda por caer', () =
   assert.equal(r.totalCents, 2000 * dias + 50000);
   assert.equal(r.hastaHoyCents + r.pendienteCents, r.totalCents);
 });
+
+test('un gasto que se repite cae varias veces si el periodo abarca varios meses', () => {
+  const { rangeOccurrences } = require('../src/expenses');
+  const alquiler = { ...gasto('monthly', '2026-01-05'), amount_cents: 50000 };
+
+  // Tres meses, tres recibos.
+  const tres = rangeOccurrences(alquiler, '2026-03-01', '2026-05-31');
+  assert.deepEqual(tres.map((d) => d.fecha), ['2026-03-05', '2026-04-05', '2026-05-05']);
+
+  // Un trozo de mes que no llega al día 5 no coge ninguno.
+  assert.equal(rangeOccurrences(alquiler, '2026-03-06', '2026-04-04').length, 0);
+
+  const trimestral = { ...gasto('quarterly', '2026-01-20'), amount_cents: 10000 };
+  assert.deepEqual(rangeOccurrences(trimestral, '2026-01-01', '2026-12-31').map((d) => d.fecha), [
+    '2026-01-20',
+    '2026-04-20',
+    '2026-07-20',
+    '2026-10-20',
+  ]);
+});
+
+test('el gasto diario cuenta los días exactos que pidas, no el mes entero', () => {
+  const { rangeOccurrences } = require('../src/expenses');
+  const pub = { ...gasto('daily', '2026-08-01'), amount_cents: 2000 };
+
+  assert.equal(rangeOccurrences(pub, '2026-08-02', '2026-08-02').length, 1);
+  assert.equal(rangeOccurrences(pub, '2026-08-01', '2026-08-07').length, 7);
+  // Un periodo a caballo entre dos meses tampoco se corta por el cambio de mes.
+  assert.equal(rangeOccurrences(pub, '2026-08-28', '2026-09-03').length, 7);
+  // Antes de empezar no cuenta nada.
+  assert.equal(rangeOccurrences(pub, '2026-07-01', '2026-07-31').length, 0);
+  // Y un periodo del revés no devuelve nada en lugar de dar vueltas.
+  assert.equal(rangeOccurrences(pub, '2026-08-10', '2026-08-01').length, 0);
+});
+
+test('el resumen por fechas cuadra con el del mes', () => {
+  const { createExpense, monthSummary, rangeSummary } = require('../src/expenses');
+  const { currentMonth, monthRange } = require('../src/util');
+
+  const mes = currentMonth();
+  const { from, to } = monthRange(mes);
+  createExpense({ name: 'Gestoría', amount_cents: 12000, kind: 'monthly', anchor_date: from, notes: '' });
+
+  const porMes = monthSummary(mes, 'out');
+  const porFechas = rangeSummary({ from, to, direction: 'out' });
+  assert.equal(porFechas.totalCents, porMes.totalCents);
+  assert.equal(porFechas.hastaHoyCents, porMes.hastaHoyCents);
+});
