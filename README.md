@@ -181,9 +181,12 @@ docker run -p 4400:4400 -v sasmoney-data:/data \
 - **Los gastos que se repiten se reparten por días.** Un alquiler de 500 € al mes no se gasta
   de golpe el día que se paga: cubre todo el mes. Así que si miras **un solo día** te tocan
   500/31 = **16,13 €**, no 500 € ni 0 €. Lo mismo con los trimestrales y los anuales, que se
-  reparten entre los días de su tramo. Los diarios ya van por días y los pagos sueltos son de
-  un día concreto: esos no se reparten. El mes entero sigue sumando exactamente el recibo, sin
-  céntimos perdidos por el redondeo.
+  reparten entre los días de su trimestre o de su año. Los diarios ya van por días y los pagos
+  sueltos son de un día concreto: esos no se reparten.
+- **El reparto va por meses naturales**, no por la fecha en que lo diste de alta. Un gasto de
+  200 € al mes apuntado el día 20 cuenta **200 € en ese mes**, no 200 × 12/31 con el resto
+  cayendo en el mes siguiente: "doscientos euros al mes" son doscientos euros ese mes. Por eso
+  el mes entero suma siempre el recibo exacto, sin céntimos perdidos por el redondeo.
 - **Mientras el periodo está en marcha puedes verlo de dos maneras**, con un botón:
   *Todo el mes* (lo que va a costar, con los gastos que aún faltan por caer) o *Sólo hasta
   hoy* (lo que llevas gastado de verdad). Lo facturado siempre es lo que llevas: eso no se

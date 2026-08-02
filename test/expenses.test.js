@@ -195,18 +195,47 @@ test('un gasto que se repite se reparte entre los días que cubre', () => {
 
 test('el trimestral y el anual se reparten por sus días, no por su mes de pago', () => {
   const { rangeAccrual } = require('../src/expenses');
-  // Se paga el 20 de enero y cubre hasta el 19 de abril: 90 días.
+  // Se paga el 20 de enero y cubre enero, febrero y marzo enteros: 90 días.
   const trimestral = { id: 0, kind: 'quarterly', anchor_date: '2026-01-20', amount_cents: 30000 };
 
-  // A agosto le tocan sus 31 días del tramo que empezó el 20 de julio (92 días).
-  assert.equal(rangeAccrual(trimestral, '2026-08-01', '2026-08-31').cents, Math.round((30000 * 31) / 92));
-  // Y no cero, que es lo que pasaría si sólo contara el mes en que se paga.
-  assert.ok(rangeAccrual(trimestral, '2026-08-02', '2026-08-02').cents > 0);
+  // El trimestre entero suma el recibo completo...
+  assert.equal(rangeAccrual(trimestral, '2026-01-01', '2026-03-31').cents, 30000);
+  // ...y a febrero le tocan sus 28 días de los 90 del trimestre.
+  assert.equal(rangeAccrual(trimestral, '2026-02-01', '2026-02-28').cents, Math.round((30000 * 28) / 90));
+  // Un día suelto de un mes en el que no se paga tampoco es cero.
+  assert.ok(rangeAccrual(trimestral, '2026-02-10', '2026-02-10').cents > 0);
 
   const anual = { id: 0, kind: 'yearly', anchor_date: '2026-03-10', amount_cents: 36500 };
   assert.ok(rangeAccrual(anual, '2026-09-01', '2026-09-30').cents > 0);
-  // Un año entero desde su fecha suma el recibo completo.
-  assert.equal(rangeAccrual(anual, '2026-03-10', '2027-03-09').cents, 36500);
+  // El año que cubre, contado por meses naturales, suma el recibo completo.
+  assert.equal(rangeAccrual(anual, '2026-03-01', '2027-02-28').cents, 36500);
+});
+
+test('un gasto mensual cuenta el mes entero aunque lo dieras de alta a mitad', () => {
+  const { rangeAccrual } = require('../src/expenses');
+  // Dado de alta el 20 de agosto, pero son "200 € al mes".
+  const canales = { id: 0, kind: 'monthly', anchor_date: '2026-08-20', amount_cents: 20000 };
+
+  // Agosto entero son los 200 €, no 200 × 12/31 por haberlo apuntado el día 20.
+  assert.equal(rangeAccrual(canales, '2026-08-01', '2026-08-31').cents, 20000);
+  assert.equal(rangeAccrual(canales, '2026-09-01', '2026-09-30').cents, 20000);
+  // Un día suelto es la parte de ese día del mes.
+  assert.equal(rangeAccrual(canales, '2026-08-02', '2026-08-02').cents, Math.round(20000 / 31));
+  // Y antes de existir no cuenta nada.
+  assert.equal(rangeAccrual(canales, '2026-07-01', '2026-07-31').cents, 0);
+});
+
+test('dice cuántos días del tramo le tocan, para poder explicarlo', () => {
+  const { rangeAccrual } = require('../src/expenses');
+  const canales = { id: 0, kind: 'monthly', anchor_date: '2026-08-01', amount_cents: 20000 };
+
+  const unDia = rangeAccrual(canales, '2026-08-02', '2026-08-02');
+  assert.equal(unDia.dias, 1);
+  assert.equal(unDia.span, 31); // "1 de sus 31 días"
+
+  // A caballo entre dos meses hay dos tramos, así que no se puede resumir en uno.
+  const dosMeses = rangeAccrual(canales, '2026-08-20', '2026-09-10');
+  assert.equal(dosMeses.span, null);
 });
 
 test('los diarios y los pagos sueltos no se reparten: caen donde caen', () => {

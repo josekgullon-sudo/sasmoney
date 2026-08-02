@@ -127,61 +127,95 @@ function rangeOccurrences(expense, from, to) {
   return fechas;
 }
 
+/** Meses enteros que hay de un mes a otro ('2026-01-01' → '2026-08-01' = 7). */
+function monthsBetween(a, b) {
+  const [ay, am] = a.split('-').map(Number);
+  const [by, bm] = b.split('-').map(Number);
+  return by * 12 + (bm - 1) - (ay * 12 + (am - 1));
+}
+
+/** El día 1 del mes de una fecha. */
+function monthStart(iso) {
+  return `${iso.slice(0, 7)}-01`;
+}
+
 /**
- * El cobro que "cubre" una fecha: el último que cayó en o antes de ella.
- * Un alquiler que se paga el día 5 cubre desde el día 5 hasta el 4 del mes
- * siguiente, así que el día 20 lo cubre el cobro del 5.
+ * El tramo de tiempo que cubre cada cobro de un gasto que se repite, en **meses
+ * naturales**: uno para los mensuales, tres para los trimestrales, doce para los
+ * anuales, contados siempre desde el día 1.
+ *
+ * Que cuenten meses naturales y no "del día 20 al 19" es lo que hace que
+ * "200 € al mes" sean 200 € en agosto, aunque lo dieras de alta el día 20. Si
+ * el tramo empezara el día del alta, agosto se quedaría con doce treintaiunavos
+ * y el resto se iría a septiembre, que no es lo que nadie entiende por
+ * "doscientos euros al mes".
  */
+function coverageOf(expense, ocurrencia) {
+  const step = KIND_STEP[expense.kind];
+  if (!step) return null;
+  const inicio = monthStart(ocurrencia);
+  return { inicio, fin: addDays(addMonths(inicio, step), -1) };
+}
+
+/** El tramo que cubre una fecha, o el primero si la fecha es anterior al alta. */
 function coveringDate(expense, fecha) {
   const step = KIND_STEP[expense.kind];
   if (!step) return null;
 
-  const anchor = expense.anchor_date;
-  if (anchor >= fecha) return anchor;
+  const primero = monthStart(expense.anchor_date);
+  if (primero >= fecha) return primero;
 
-  const [ay, am] = anchor.split('-').map(Number);
-  const [fy, fm] = fecha.split('-').map(Number);
-  const meses = fy * 12 + (fm - 1) - (ay * 12 + (am - 1));
-  let vueltas = Math.max(0, Math.floor(meses / step));
-
-  // El salto por meses puede pasarse o quedarse corto un día; se ajusta.
-  while (vueltas > 0 && addMonths(anchor, vueltas * step) > fecha) vueltas -= 1;
-  while (addMonths(anchor, (vueltas + 1) * step) <= fecha) vueltas += 1;
-  return addMonths(anchor, vueltas * step);
+  let vueltas = Math.max(0, Math.floor(monthsBetween(primero, fecha) / step));
+  // El salto por meses puede pasarse o quedarse corto; se ajusta.
+  while (vueltas > 0 && addMonths(primero, vueltas * step) > fecha) vueltas -= 1;
+  while (addMonths(primero, (vueltas + 1) * step) <= fecha) vueltas += 1;
+  return addMonths(primero, vueltas * step);
 }
 
 /**
  * Lo que le toca a un periodo de un gasto, repartido por días.
  *
- * Un alquiler de 500 € no se gasta "de golpe el día 5": cubre todo el mes. Si
- * miras un solo día, lo justo es que te toquen 500/31 = 16,13 €, no 500 € ni 0 €.
- * Por eso los gastos que se repiten se prorratean entre los días que cubren, y
- * lo que se suma es el trozo que cae dentro del periodo que estás mirando.
+ * Un alquiler de 500 € al mes no se gasta "de golpe el día que se paga": cubre
+ * todo el mes. Si miras un solo día, lo justo es que te toquen 500/31 = 16,13 €,
+ * no 500 € ni 0 €. Por eso los gastos que se repiten se reparten entre los días
+ * del tramo que cubren, y se suma el trozo que cae dentro de lo que estás mirando.
  *
  * Los diarios ya van por días y los pagos sueltos son de un día concreto: esos
  * no se reparten, se cuentan tal cual.
  *
- * Cada tramo se redondea una sola vez sobre su total, así que el mes entero
- * suma exactamente el importe del recibo, sin céntimos perdidos por el camino.
+ * Cada tramo se redondea una sola vez sobre su total, así que un mes entero suma
+ * exactamente el importe del recibo, sin céntimos perdidos por el camino.
+ *
+ * Devuelve también `dias` (los que caen dentro) y `span` (los que tiene el tramo)
+ * cuando hay un solo tramo, para poder decir "2 de 31 días" en lugar de dejarlo
+ * en un misterioso "parte proporcional".
  */
 function rangeAccrual(expense, from, to) {
-  if (!from || !to || to < from) return { cents: 0, prorrateado: false };
+  const vacio = { cents: 0, prorrateado: false, dias: 0, span: null };
+  if (!from || !to || to < from) return vacio;
 
   if (expense.kind === 'daily' || expense.kind === 'once') {
     const dias = rangeOccurrences(expense, from, to);
-    return { cents: dias.reduce((a, d) => a + d.amount_cents, 0), prorrateado: false };
+    return {
+      cents: dias.reduce((a, d) => a + d.amount_cents, 0),
+      prorrateado: false,
+      dias: dias.length,
+      span: null,
+    };
   }
 
   const step = KIND_STEP[expense.kind];
-  if (!step) return { cents: 0, prorrateado: false };
+  if (!step) return vacio;
 
   let cents = 0;
-  // El cobro que cubre el primer día del periodo puede haber caído antes de él.
+  let dias = 0;
+  let tramos = 0;
+  let span = null;
+
   let inicio = coveringDate(expense, from);
   while (inicio && inicio <= to) {
-    const siguiente = addMonths(inicio, step);
-    const fin = addDays(siguiente, -1);
-    const span = daysBetween(inicio, fin);
+    const { fin } = coverageOf(expense, inicio);
+    const largo = daysBetween(inicio, fin);
 
     const desde = inicio > from ? inicio : from;
     const hasta = fin < to ? fin : to;
@@ -189,12 +223,15 @@ function rangeAccrual(expense, from, to) {
 
     if (dentro > 0) {
       cents +=
-        dentro >= span ? expense.amount_cents : Math.round((expense.amount_cents * dentro) / span);
+        dentro >= largo ? expense.amount_cents : Math.round((expense.amount_cents * dentro) / largo);
+      dias += dentro;
+      tramos += 1;
+      span = largo;
     }
-    inicio = siguiente;
+    inicio = addMonths(inicio, step);
   }
 
-  return { cents, prorrateado: true };
+  return { cents, prorrateado: true, dias, span: tramos === 1 ? span : null };
 }
 
 /** Importes ajustados a mano de un gasto entre dos fechas. */
@@ -299,6 +336,9 @@ function rangeExpenses({ from, to, direction = 'out' }) {
       dias: pagos,
       ajustados: pagos.filter((d) => d.ajustado).length,
       prorrateado: periodo.prorrateado,
+      // Para poder decir "2 de 31 días" en vez de un "parte proporcional" a secas.
+      dias_dentro: periodo.dias,
+      dias_tramo: periodo.span,
       total_cents: periodo.cents,
       hasta_hoy_cents: corrido.cents,
       pendiente_cents: periodo.cents - corrido.cents,

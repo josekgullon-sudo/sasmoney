@@ -288,6 +288,8 @@ details.box > *:not(summary) { margin-top: 10px; }
   /* En el móvil no cabe todo: se esconde lo accesorio antes que recortar cifras. */
   .hide-narrow { display: none; }
   .wide-only { display: none; }
+  /* Dos botones seguidos no caben en la última columna: se ponen uno debajo del otro. */
+  td.acciones { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
 }
 
 @media print {

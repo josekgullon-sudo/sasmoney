@@ -71,7 +71,9 @@ ${e ? formularioEdicion(e, esIngreso, diasAjustados, periodo, hoy) : ''}
 
 <div class="card" style="margin-top:16px">
   <h2>Gastos</h2>
-  <p class="sub">Lo que paga la empresa. Los que se repiten se calculan solos.</p>
+  <p class="sub">Lo que paga la empresa. Los que se repiten se calculan solos.
+     En <strong>Le toca</strong> va la parte que le corresponde a ${esc(periodo.label)}: un gasto
+     de 200 € al mes son 200 € si miras el mes entero y 6,45 € si miras un solo día.</p>
   ${e ? '' : formularioAlta('out', hoy)}
   ${listaMovimientos(gastos.todos, 'out')}
 </div>
@@ -300,7 +302,11 @@ function listaMovimientos(filas, direction) {
         g.esteMes
           ? `<strong>${money(g.esteMes.total_cents)}</strong>${
               g.esteMes.prorrateado && g.esteMes.total_cents !== g.amount_cents
-                ? '<div class="small muted">parte proporcional</div>'
+                ? `<div class="small muted">${
+                    g.esteMes.dias_tramo
+                      ? `${g.esteMes.dias_dentro} de sus ${g.esteMes.dias_tramo} días`
+                      : 'la parte que le toca'
+                  }</div>`
                 : ''
             }${
               g.esteMes.veces > 1
@@ -311,7 +317,7 @@ function listaMovimientos(filas, direction) {
             }`
           : '<span class="muted">—</span>'
       }</td>
-      <td class="right nowrap">
+      <td class="right acciones">
         <a class="btn ghost small" href="/admin/caja?editar=${g.id}">Editar</a>
         <form method="post" action="/admin/caja/${g.id}/borrar" class="inline">
           <button class="btn ghost small" type="submit"
