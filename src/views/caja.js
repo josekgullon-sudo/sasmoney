@@ -11,23 +11,33 @@ const { stats, money, emptyState } = require('./common');
  * reparte la inversión entre las trabajadoras.
  */
 function adminCaja({
-  user, flash, warning, month, hoy,
+  user, flash, warning, month, hoy, corte, enCurso,
   gastos, ingresos, totales,
   editando, diasAjustados,
   workers, reparto, otrosGastos,
 }) {
   const e = editando;
   const esIngreso = e ? e.direction === 'in' : false;
+  const hasta = corte ? `del 1 al ${formatDateShort(corte)}` : 'aún sin empezar';
 
   const body = `
 <h1>Caja de ${esc(monthLabel(month))}</h1>
-<p class="sub">El dinero que entra y sale por fuera de los servicios.</p>
+<p class="sub">El dinero que entra y sale por fuera de los servicios.
+   Las cifras de arriba son <strong>${esc(hasta)}</strong>.</p>
 ${monthPickerCaja(month)}
 
 ${stats([
   { k: 'Entra', v: money(totales.entraCents), sub: 'servicios + otros ingresos' },
-  { k: 'Sale', v: money(totales.gastosCents), sub: `${gastos.delMes.length} gasto(s)` },
-  { k: 'De eso, inversión', v: money(totales.inversionCents), sub: 'publicidad y similares' },
+  {
+    k: 'Sale',
+    v: money(totales.gastosCents),
+    sub: enCurso ? `${money(totales.gastosMesCents)} a fin de mes` : `${gastos.delMes.length} gasto(s)`,
+  },
+  {
+    k: 'De eso, marketing',
+    v: money(totales.inversionCents),
+    sub: enCurso ? `${money(totales.inversionMesCents)} a fin de mes` : 'publicidad y similares',
+  },
   { k: 'Queda', v: money(totales.quedaCents), sub: 'para la empresa', accent: true },
 ])}
 
@@ -47,7 +57,7 @@ ${e ? formularioEdicion(e, esIngreso, diasAjustados, month, hoy) : ''}
   ${listaMovimientos(ingresos.todos, 'in')}
 </div>
 
-${tarjetaReparto(workers, totales.inversionCents, reparto, month, otrosGastos)}
+${tarjetaReparto(workers, totales.inversionCents, reparto, month, otrosGastos, corte, enCurso)}
 
 <div class="card">
   <h2>Lo que viene</h2>
@@ -243,7 +253,7 @@ function listaMovimientos(filas, direction) {
   return `<div class="table-wrap"><table>
   <thead><tr>
     <th>Concepto</th><th class="hide-narrow">¿Cada cuánto?</th>
-    <th class="num">Importe</th><th class="num">Este mes</th><th></th>
+    <th class="num hide-narrow">Importe</th><th class="num">Hasta hoy</th><th></th>
   </tr></thead>
   <tbody>
     ${filas
@@ -252,12 +262,21 @@ function listaMovimientos(filas, direction) {
       <td>${esc(g.name)}
           ${g.active ? '' : '<span class="pill grey">En pausa</span>'}
           ${g.is_investment ? '<span class="pill">Inversión</span>' : ''}
+          <div class="small muted only-narrow">${money(g.amount_cents)}${
+            g.kind === 'daily' ? ' al día' : ` · ${esc(KIND_LABELS[g.kind])}`
+          }</div>
           ${g.notes ? `<div class="small muted">${esc(g.notes)}</div>` : ''}</td>
       <td class="small muted hide-narrow">${esc(KIND_LABELS[g.kind])}</td>
-      <td class="num">${money(g.amount_cents)}${g.kind === 'daily' ? '<div class="small muted">al día</div>' : ''}</td>
+      <td class="num hide-narrow">${money(g.amount_cents)}${
+          g.kind === 'daily' ? '<div class="small muted">al día</div>' : ''
+        }</td>
       <td class="num">${
         g.esteMes
-          ? `<strong>${money(g.esteMes.total_cents)}</strong>${
+          ? `<strong>${money(g.esteMes.hasta_hoy_cents)}</strong>${
+              g.esteMes.pendiente_cents > 0
+                ? `<div class="small muted">${money(g.esteMes.total_cents)} a fin de mes</div>`
+                : ''
+            }${
               g.esteMes.veces > 1
                 ? `<div class="small muted">${g.esteMes.veces} días${
                     g.esteMes.ajustados ? `, ${g.esteMes.ajustados} ajustado(s)` : ''
@@ -281,14 +300,16 @@ function listaMovimientos(filas, direction) {
 }
 
 /** Quién carga con qué parte de la publicidad. Los porcentajes los pone el jefe. */
-function tarjetaReparto(workers, inversionCents, reparto, month, otrosGastos) {
+function tarjetaReparto(workers, inversionCents, reparto, month, otrosGastos, corte, enCurso) {
   const suma = reparto.sumaPercent;
   const fmt = (n) => String(Number(n) % 1 === 0 ? n : n.toFixed(1)).replace('.', ',');
+  const hasta = corte ? `hasta el ${formatDateShort(corte)}` : 'hasta hoy';
 
   return `<div class="card">
-  <h2>Reparto de la inversión</h2>
+  <h2>Reparto del marketing</h2>
   <p class="sub">Le dices a cada uno qué porcentaje de la publicidad carga. Ese porcentaje se
-     mantiene mes tras mes hasta que lo cambies, y es lo que decide su rentabilidad.</p>
+     mantiene mes tras mes hasta que lo cambies, y es lo que decide su rentabilidad.
+     Los euros que ves son los que se llevan gastados ${esc(hasta)}.</p>
 
   ${
     workers.length === 0
@@ -299,7 +320,7 @@ function tarjetaReparto(workers, inversionCents, reparto, month, otrosGastos) {
       <thead><tr>
         <th>Trabajador</th>
         <th class="num" style="width:130px">Su porcentaje</th>
-        <th class="num hide-narrow">Le toca este mes</th>
+        <th class="num hide-narrow">Le toca hasta hoy</th>
       </tr></thead>
       <tbody>
         ${reparto.rows
@@ -373,8 +394,14 @@ function tarjetaReparto(workers, inversionCents, reparto, month, otrosGastos) {
       ? emptyState('No hay trabajadores en activo.')
       : `<div class="table-wrap"><table>
     <tbody>
-      <tr><td>Resto de gastos de ${esc(monthLabel(month))}</td>
+      <tr><td>Resto de gastos ${esc(hasta)}</td>
           <td class="num">${money(otrosGastos.totalCents)}</td></tr>
+      ${
+        enCurso
+          ? `<tr><td class="muted">Si acabara ${esc(monthLabel(month))}</td>
+             <td class="num muted">${money(otrosGastos.mesCents)}</td></tr>`
+          : ''
+      }
       <tr><td>Entre ${otrosGastos.activos} trabajador(es) en activo</td>
           <td class="num"><strong>${money(otrosGastos.cadaUnoCents)} cada uno</strong></td></tr>
     </tbody>

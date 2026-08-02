@@ -198,12 +198,47 @@ function monthExpenses(month, direction = 'out') {
       dias,
       ajustados: dias.filter((d) => d.ajustado).length,
       total_cents: dias.reduce((a, d) => a + d.amount_cents, 0),
+      // Lo que ya ha caído del 1 hasta hoy, y lo que queda por caer este mes.
+      hasta_hoy_cents: dias.filter((d) => d.fecha <= hoy).reduce((a, d) => a + d.amount_cents, 0),
       pendiente_cents: dias.filter((d) => d.fecha > hoy).reduce((a, d) => a + d.amount_cents, 0),
     });
   }
 
   rows.sort((a, b) => a.fecha.localeCompare(b.fecha));
   return rows;
+}
+
+/**
+ * El mes resumido, con dos cifras para cada cosa:
+ *
+ *   - `hastaHoyCents`: lo que se lleva gastado (o ingresado) del día 1 a hoy.
+ *   - `totalCents`:    lo que va a sumar el mes entero cuando termine.
+ *
+ * Los dos números importan y no son el mismo: un gasto diario de 20 € son 620 €
+ * a fin de mes, pero el día 2 sólo se han gastado 40 €. Enseñar el mes completo
+ * el día 2 hace pensar que la empresa va en números rojos cuando no es así.
+ */
+function monthSummary(month, direction = 'out') {
+  const rows = monthExpenses(month, direction);
+  const suma = (filtro, campo) => rows.filter(filtro).reduce((a, r) => a + r[campo], 0);
+  const todos = () => true;
+  const esInversion = (r) => Boolean(r.is_investment);
+  const noEsInversion = (r) => !r.is_investment;
+
+  return {
+    rows,
+    totalCents: suma(todos, 'total_cents'),
+    hastaHoyCents: suma(todos, 'hasta_hoy_cents'),
+    pendienteCents: suma(todos, 'pendiente_cents'),
+    inversion: {
+      totalCents: suma(esInversion, 'total_cents'),
+      hastaHoyCents: suma(esInversion, 'hasta_hoy_cents'),
+    },
+    otros: {
+      totalCents: suma(noEsInversion, 'total_cents'),
+      hastaHoyCents: suma(noEsInversion, 'hasta_hoy_cents'),
+    },
+  };
 }
 
 function monthExpensesTotal(month, direction = 'out') {
@@ -254,6 +289,7 @@ module.exports = {
   updateExpense,
   deleteExpense,
   monthExpenses,
+  monthSummary,
   monthExpensesTotal,
   monthInvestmentTotal,
   upcoming,

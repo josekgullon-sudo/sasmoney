@@ -167,13 +167,22 @@ function migrate() {
   const entryCols = db.prepare('PRAGMA table_info(entries)').all().map((c) => c.name);
   if (!entryCols.includes('service_time')) {
     db.exec("ALTER TABLE entries ADD COLUMN service_time TEXT NOT NULL DEFAULT ''");
+  }
 
-    // A los servicios que ya había se les pone la hora en la que se apuntaron,
-    // que es la que quedó guardada en created_at (en UTC, hay que pasarla).
+  // A los servicios que se quedaron sin hora se les pone la del momento en que
+  // se apuntaron, que es la que guarda created_at (en UTC, hay que pasarla).
+  // Se revisa en cada arranque, no sólo al crear la columna: así una fila que se
+  // quedara vacía por lo que sea acaba teniendo su hora.
+  const sinHora = db
+    .prepare("SELECT id, created_at FROM entries WHERE service_time IS NULL OR TRIM(service_time) = ''")
+    .all();
+  if (sinHora.length > 0) {
     const { hmFromStamp } = require('./util');
-    const viejos = db.prepare("SELECT id, created_at FROM entries WHERE service_time = ''").all();
     const poner = db.prepare('UPDATE entries SET service_time = ? WHERE id = ?');
-    for (const e of viejos) poner.run(hmFromStamp(e.created_at), e.id);
+    for (const e of sinHora) {
+      const hora = hmFromStamp(e.created_at);
+      if (hora) poner.run(hora, e.id);
+    }
   }
 
   const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);

@@ -26,9 +26,11 @@ Pensada para usarse desde el móvil: apuntar un cobro son dos toques.
 
 Cinco pantallas, cada una con una pregunta clara:
 
-- **Resumen** — *¿cómo va el mes?* Lo que entra, lo que se llevan ellas, los gastos y lo que
-  queda. Y una fila por trabajador con lo que factura, su comisión, su parte de la inversión,
-  **lo que deja** y lo que le debes, con el botón de liquidar al lado.
+- **Resumen** — *¿cómo va el mes?* Todo va **del día 1 hasta hoy**: lo que entra, lo que se
+  llevan ellas, los gastos y lo que queda. Y una fila por trabajador con lo que factura, su
+  comisión, **su porcentaje de marketing** y lo que eso le cuesta hasta hoy, **lo que deja** y lo
+  que le debes, con el botón de liquidar al lado. Al lado de cada cifra tienes la previsión de
+  cómo acabaría el mes si no entrara nada más.
 - **Liquidar** — *¿cuánto le pago a X?* Eliges una trabajadora o todas y el periodo. Cuando le
   pagues, pulsas *Liquidado* y su cuenta de ese periodo vuelve a cero: esos servicios quedan
   cerrados y ya no se cuentan otra vez ni se pueden modificar.
@@ -159,12 +161,17 @@ docker run -p 4400:4400 -v sasmoney-data:/data \
   y las siguientes se calculan, así que nunca se acaban ni hay que renovarlos.
 - **La caja del mes** es lo facturado, menos las comisiones, más los otros ingresos, menos
   los gastos.
+- **Las cuentas van del día 1 hasta hoy**, no hasta fin de mes. El día 2, de una publicidad
+  de 20 €/día se han gastado 40 €, no 620 €: enseñar el mes entero desde el día 1 hace
+  parecer que la empresa está en números rojos cuando no lo está. La previsión de fin de mes
+  se ve al lado, en gris, para saber por dónde van los tiros.
 - **Un gasto diario cuenta tantas veces como días tenga el mes**: 20 €/día son 620 € en un
   mes de 31 días y 560 € en febrero. Si empieza a mitad de mes, sólo cuentan los días desde
   esa fecha. Y se puede **cambiar el importe de un día suelto** sin tocar los demás, para los
   días en que se invierte más o menos.
 - **La inversión la repartes tú**: en Caja le pones a cada trabajador su porcentaje fijo
-  (60 %, 30 %…) y se aplica tal cual, mes tras mes, hasta que lo cambies. El porcentaje que
+  (60 %, 30 %…) y se aplica tal cual, mes tras mes, hasta que lo cambies. Ese porcentaje y
+  los euros que lleva gastados hasta hoy salen en su fila del Resumen. El porcentaje que
   escribes es el que se usa: si suman 90, el 10 % restante **queda sin asignar** y lo paga la
   empresa, sin cargarlo a nadie. Hay un botón que rellena los porcentajes con lo que ha
   facturado cada uno, por si quieres partir de ahí, pero es sólo un atajo.

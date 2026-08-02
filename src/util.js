@@ -51,6 +51,22 @@ function monthRange(month) {
   return { from: `${pad(y, 4)}-${pad(m, 2)}-01`, to: `${pad(y, 4)}-${pad(m, 2)}-${pad(last, 2)}` };
 }
 
+/**
+ * Hasta qué día de ese mes hay que contar: hoy si el mes está en curso, el
+ * último día si ya pasó, y '' si aún no ha empezado (todavía no ha pasado nada).
+ */
+function monthCutoff(month, hoy = todayISO()) {
+  const { from, to } = monthRange(month);
+  if (hoy < from) return '';
+  return hoy < to ? hoy : to;
+}
+
+/** ¿Ese mes sigue corriendo? (quedan días por delante) */
+function monthInProgress(month, hoy = todayISO()) {
+  const { to } = monthRange(month);
+  return hoy < to;
+}
+
 /** Etiqueta legible de un mes: '2026-07' → 'julio 2026'. */
 function monthLabel(month) {
   const [y, m] = String(month).split('-').map(Number);
@@ -134,6 +150,8 @@ module.exports = {
   isValidTime,
   currentMonth,
   monthRange,
+  monthCutoff,
+  monthInProgress,
   monthLabel,
   recentMonths,
   formatDate,

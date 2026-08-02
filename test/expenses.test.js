@@ -99,3 +99,30 @@ test('el próximo pago de un gasto diario es hoy mismo', () => {
   assert.equal(nextDate(gasto('daily', '2026-01-01'), '2026-07-28'), '2026-07-28');
   assert.equal(nextDate(gasto('daily', '2026-09-01'), '2026-07-28'), '2026-09-01');
 });
+
+test('el mes se resume separando lo gastado de lo que aún queda por caer', () => {
+  const { createExpense, monthSummary } = require('../src/expenses');
+  const { todayISO, currentMonth, monthRange } = require('../src/util');
+
+  const mes = currentMonth();
+  const { from, to } = monthRange(mes);
+  const hoy = todayISO();
+  const dia = Number(hoy.slice(8, 10));
+  const dias = Number(to.slice(8, 10));
+
+  // 20 €/día de publicidad desde el día 1, y un alquiler suelto ya pagado el día 1.
+  createExpense({ name: 'Publicidad', amount_cents: 2000, kind: 'daily', anchor_date: from, notes: '', is_investment: 1 });
+  createExpense({ name: 'Alquiler', amount_cents: 50000, kind: 'once', anchor_date: from, notes: '', is_investment: 0 });
+
+  const r = monthSummary(mes, 'out');
+
+  // La publicidad cuenta sólo los días transcurridos, no el mes entero.
+  assert.equal(r.inversion.hastaHoyCents, 2000 * dia);
+  assert.equal(r.inversion.totalCents, 2000 * dias);
+  assert.equal(r.otros.hastaHoyCents, 50000);
+  assert.equal(r.otros.totalCents, 50000);
+
+  assert.equal(r.hastaHoyCents, 2000 * dia + 50000);
+  assert.equal(r.totalCents, 2000 * dias + 50000);
+  assert.equal(r.hastaHoyCents + r.pendienteCents, r.totalCents);
+});

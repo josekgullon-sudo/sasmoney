@@ -76,3 +76,23 @@ test('la hora se calcula en la zona del negocio', () => {
   assert.equal(isValidTime('9:15'), false);
   assert.equal(isValidTime(''), false);
 });
+
+test('las cuentas van del día 1 hasta hoy, no hasta fin de mes', () => {
+  const { monthCutoff, monthInProgress } = require('../src/util');
+
+  // Mes en curso: se corta en el día de hoy.
+  assert.equal(monthCutoff('2026-08', '2026-08-02'), '2026-08-02');
+  assert.equal(monthInProgress('2026-08', '2026-08-02'), true);
+
+  // Mes ya terminado: cuenta entero.
+  assert.equal(monthCutoff('2026-07', '2026-08-02'), '2026-07-31');
+  assert.equal(monthInProgress('2026-07', '2026-08-02'), false);
+
+  // El último día del mes ya no queda nada por delante.
+  assert.equal(monthCutoff('2026-08', '2026-08-31'), '2026-08-31');
+  assert.equal(monthInProgress('2026-08', '2026-08-31'), false);
+
+  // Mes que aún no ha empezado: no ha pasado nada.
+  assert.equal(monthCutoff('2026-09', '2026-08-02'), '');
+  assert.equal(monthInProgress('2026-09', '2026-08-02'), true);
+});

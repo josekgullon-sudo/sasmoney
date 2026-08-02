@@ -7,27 +7,42 @@ const { stats, money, emptyState } = require('./common');
 const { PAYMENT_METHODS, metodoLegible } = require('./worker');
 
 function adminHome({
-  user, flash, warning, month, rows, totals, pendingTotalCents,
-  gastos, ingresos, inversionCents, inversionSinAsignarCents, otrosGastosCents, trabajadoresActivos,
+  user, flash, warning, month, corte, enCurso, rows, totals, pendingTotalCents,
+  gastos, ingresos, inversion, inversionSinAsignarCents, otrosGastos, trabajadoresActivos,
 }) {
-  const quedaCents = totals.totalCents - totals.commissionCents + ingresos.totalCents - gastos.totalCents;
+  // Todo lo que se enseña va del día 1 al día de hoy. La previsión del mes
+  // entero se ve al lado, para que se distinga lo gastado de lo que falta.
+  const quedaHoyCents =
+    totals.totalCents - totals.commissionCents + ingresos.hastaHoyCents - gastos.hastaHoyCents;
+  const quedaMesCents =
+    totals.totalCents - totals.commissionCents + ingresos.totalCents - gastos.totalCents;
+
   const pct = (parte, todo) => (todo > 0 ? (parte / todo) * 100 : 0);
   const fmtPct = (n) => `${n.toFixed(1).replace('.', ',')} %`;
+  const periodo = corte
+    ? `Del 1 al ${esc(formatDateShort(corte))}`
+    : 'Este mes todavía no ha empezado';
 
   const body = `
 <h1>Resumen de ${esc(monthLabel(month))}</h1>
+<p class="sub">${periodo}. Todas las cifras son <strong>lo que llevas hasta hoy</strong>, no el mes entero.</p>
 ${monthForm('/admin', month)}
 
 ${stats([
-  { k: 'Entra', v: money(totals.totalCents + ingresos.totalCents), sub: `${totals.count} servicio(s)` },
+  { k: 'Entra', v: money(totals.totalCents + ingresos.hastaHoyCents), sub: `${totals.count} servicio(s)` },
   { k: 'Se llevan ellas', v: money(totals.commissionCents), sub: 'comisiones' },
-  { k: 'Gastos', v: money(gastos.totalCents), sub: `${money(inversionCents)} de inversión` },
-  { k: 'Me queda', v: money(quedaCents), sub: 'para la empresa', accent: true },
+  {
+    k: 'Gastos hasta hoy',
+    v: money(gastos.hastaHoyCents),
+    sub: `${money(inversion.hastaHoyCents)} de marketing`,
+  },
+  { k: 'Me queda hoy', v: money(quedaHoyCents), sub: 'para la empresa', accent: true },
 ])}
 
 <div class="card" style="margin-top:16px">
   <h2>Cada trabajador</h2>
-  <p class="sub">Lo que factura, lo que se lleva, los gastos que carga y lo que deja.</p>
+  <p class="sub">Lo que factura, lo que se lleva, el marketing que carga y lo que deja,
+     del 1 ${corte ? `al ${esc(formatDateShort(corte))}` : 'en adelante'}.</p>
   ${
     rows.length === 0
       ? emptyState('Nadie ha apuntado nada este mes.')
@@ -45,9 +60,9 @@ ${stats([
       </div>
       <div class="lines">
         <div><span class="muted">Se lleva</span><span>${money(r.calc.commissionCents)}</span></div>
-        <div><span class="muted">Publicidad (${esc(fmtPct(r.sharePercent))})</span><span>${money(
-              r.inversionCents
-            )}</span></div>
+        <div><span class="muted">Marketing · <strong>${esc(
+          fmtPct(r.sharePercent)
+        )}</strong></span><span>${money(r.inversionCents)}</span></div>
         <div><span class="muted">Resto de gastos</span><span>${money(r.gastosGeneralesCents)}</span></div>
         <div class="deja"><span>Deja</span><span style="color:${
           r.beneficioCents < 0 ? 'var(--danger)' : 'inherit'
@@ -71,7 +86,8 @@ ${stats([
       <th>Trabajador</th>
       <th class="num">Factura</th>
       <th class="num hide-narrow">Se lleva</th>
-      <th class="num hide-narrow">Sus gastos</th>
+      <th class="num">Marketing</th>
+      <th class="num hide-narrow">Resto de gastos</th>
       <th class="num">Deja</th>
       <th class="num hide-narrow">Margen</th>
       <th class="num">A liquidar</th>
@@ -85,9 +101,9 @@ ${stats([
           )}</a><div class="small muted hide-narrow">${esc(ruleLabel(r.user))}</div></td>
         <td class="num">${money(r.totalCents)}<div class="small muted">${r.count} serv.</div></td>
         <td class="num hide-narrow">${money(r.calc.commissionCents)}</td>
-        <td class="num hide-narrow">${money(r.gastosTotalesCents)}
-          <div class="small muted">${money(r.inversionCents)} publi</div>
-          <div class="small muted">${money(r.gastosGeneralesCents)} resto</div></td>
+        <td class="num"><strong>${esc(fmtPct(r.sharePercent))}</strong>
+          <div class="small muted">${money(r.inversionCents)}</div></td>
+        <td class="num hide-narrow">${money(r.gastosGeneralesCents)}</td>
         <td class="num"><strong style="color:${
           r.beneficioCents < 0 ? 'var(--danger)' : 'inherit'
         }">${money(r.beneficioCents)}</strong></td>
@@ -108,9 +124,9 @@ ${stats([
       <td>Total</td>
       <td class="num">${money(totals.totalCents)}</td>
       <td class="num hide-narrow">${money(totals.commissionCents)}</td>
-      <td class="num hide-narrow">${money(
-        rows.reduce((a, r) => a + r.gastosTotalesCents, 0)
-      )}</td>
+      <td class="num">${esc(fmtPct(rows.reduce((a, r) => a + r.sharePercent, 0)))}
+        <div class="small muted">${money(rows.reduce((a, r) => a + r.inversionCents, 0))}</div></td>
+      <td class="num hide-narrow">${money(rows.reduce((a, r) => a + r.gastosGeneralesCents, 0))}</td>
       <td class="num">${money(rows.reduce((a, r) => a + r.beneficioCents, 0))}</td>
       <td class="num hide-narrow"></td>
       <td class="num">${money(pendingTotalCents)}</td>
@@ -119,53 +135,71 @@ ${stats([
   }
   <details class="box">
     <summary>Qué significa cada columna</summary>
+    <p class="small"><strong>Marketing</strong>: el porcentaje de la publicidad que le has asignado
+       y, debajo, lo que eso supone en euros <strong>del 1 ${
+         corte ? `al ${esc(formatDateShort(corte))}` : 'de mes'
+       }</strong>. De la publicidad de todo el mes (${money(
+    inversion.totalCents
+  )}) van gastados ${money(inversion.hastaHoyCents)}. Los porcentajes se cambian en
+       <a href="/admin/caja">Caja</a>.${
+         inversionSinAsignarCents > 0
+           ? ` Quedan ${money(inversionSinAsignarCents)} sin asignar a nadie: los paga la empresa.`
+           : ''
+       }</p>
+    <p class="small"><strong>Resto de gastos</strong>: lo que no es marketing (${money(
+      otrosGastos.hastaHoyCents
+    )} hasta hoy) dividido <strong>a partes iguales</strong> entre los ${trabajadoresActivos}
+       trabajadores en activo, así que si entra alguien nuevo el reparto se ajusta solo.</p>
     <p class="small"><strong>Deja</strong>: lo que factura menos su comisión y menos los gastos que
        carga. Es lo que aporta de verdad a la empresa.</p>
     <p class="small"><strong>A liquidar</strong>: lo que le debes ahora mismo, de lo que aún no le has pagado.</p>
-    <p class="small"><strong>Sus gastos</strong>: la publicidad que le has asignado, más su parte
-       del resto de gastos. El resto de gastos (${money(
-         otrosGastosCents
-       )}) se divide <strong>a partes iguales</strong> entre los ${trabajadoresActivos} trabajadores en
-       activo, así que si entra alguien nuevo el reparto se ajusta solo. Los porcentajes de la
-       publicidad se cambian en <a href="/admin/caja">Caja</a>.${
-         inversionSinAsignarCents > 0
-           ? ` De la publicidad quedan ${money(inversionSinAsignarCents)} sin asignar a nadie.`
-           : ''
-       }</p>
   </details>
 </div>
 
 <div class="card">
-  <h2>Cómo queda el mes</h2>
+  <h2>Cómo va el mes</h2>
   <div class="table-wrap">
     <table>
+      <thead><tr>
+        <th></th>
+        <th class="num">Hasta hoy</th>
+        ${enCurso ? '<th class="num hide-narrow">Si acabara el mes</th>' : ''}
+      </tr></thead>
       <tbody>
-        <tr><td>Facturado por todos</td><td class="num">${money(totals.totalCents)}</td></tr>
+        ${filaMes('Facturado por todos', totals.totalCents, totals.totalCents, enCurso)}
         ${
           ingresos.totalCents > 0
-            ? `<tr><td>+ Otros ingresos</td><td class="num">+${money(ingresos.totalCents)}</td></tr>`
+            ? filaMes('+ Otros ingresos', ingresos.hastaHoyCents, ingresos.totalCents, enCurso, '+')
             : ''
         }
-        <tr><td>− Comisiones</td><td class="num">−${money(totals.commissionCents)}</td></tr>
+        ${filaMes('− Comisiones', totals.commissionCents, totals.commissionCents, enCurso, '−')}
         ${
-          inversionCents > 0
-            ? `<tr><td>− Inversión (publicidad)</td><td class="num">−${money(inversionCents)}</td></tr>`
+          inversion.totalCents > 0
+            ? filaMes('− Marketing', inversion.hastaHoyCents, inversion.totalCents, enCurso, '−')
             : ''
         }
         ${
-          otrosGastosCents > 0
-            ? `<tr><td>− Resto de gastos</td><td class="num">−${money(otrosGastosCents)}</td></tr>`
+          otrosGastos.totalCents > 0
+            ? filaMes('− Resto de gastos', otrosGastos.hastaHoyCents, otrosGastos.totalCents, enCurso, '−')
             : ''
         }
-        <tr><td><strong>Me queda</strong></td><td class="num"><strong>${money(quedaCents)}</strong></td></tr>
+        <tr>
+          <td><strong>Me queda</strong></td>
+          <td class="num"><strong style="color:${
+            quedaHoyCents < 0 ? 'var(--danger)' : 'inherit'
+          }">${money(quedaHoyCents)}</strong></td>
+          ${enCurso ? `<td class="num muted hide-narrow">${money(quedaMesCents)}</td>` : ''}
+        </tr>
       </tbody>
     </table>
   </div>
   ${
-    gastos.pendientesCents > 0
-      ? `<p class="sub" style="margin-top:12px">De los gastos, <strong>${money(
-          gastos.pendientesCents
-        )}</strong> aún están por llegar este mes.</p>`
+    enCurso
+      ? `<p class="sub" style="margin-top:12px">De aquí a fin de mes quedan por caer
+         <strong>${money(gastos.pendientesCents)}</strong> de gastos. Si no entrara nada más,
+         el mes acabaría en <strong>${money(
+           quedaMesCents
+         )}</strong>. Lo que vale hoy es la primera cifra.</p>`
       : ''
   }
   ${
@@ -182,6 +216,15 @@ ${stats([
 </div>`;
 
   return layout({ title: 'Resumen', user, body, active: 'resumen', flash, warning });
+}
+
+/** Una fila del cuadro del mes: lo que va hasta hoy y, al lado, la previsión. */
+function filaMes(concepto, hastaHoyCents, mesCents, enCurso, signo = '') {
+  return `<tr>
+    <td>${esc(concepto)}</td>
+    <td class="num">${signo}${money(hastaHoyCents)}</td>
+    ${enCurso ? `<td class="num muted hide-narrow">${signo}${money(mesCents)}</td>` : ''}
+  </tr>`;
 }
 
 function adminSettlement({ user, flash, warning, from, to, month, onlyPending, rows, totals, history, workers, workerId }) {
@@ -553,7 +596,11 @@ function adminEntries({ user, flash, warning, entries, workers, filters, totalCe
   ${
     entries.length === 0
       ? emptyState('No hay servicios con estos filtros.')
-      : `<div class="table-wrap"><table>
+      : `${entries.map(fichaServicio).join('')}
+    <div class="item only-narrow"><div class="grow title">Total</div><div class="money">${money(
+      totalCents
+    )}</div></div>
+    <div class="table-wrap wide-only"><table>
     <thead><tr><th>Fecha</th><th>Trabajador</th><th>Cliente</th><th class="hide-narrow">Pago</th><th class="num">Importe</th><th></th></tr></thead>
     <tbody>
       ${entries
@@ -624,6 +671,24 @@ function adminEntries({ user, flash, warning, entries, workers, filters, totalCe
 </div>`;
 
   return layout({ title: 'Servicios', user, body, active: 'servicios', flash, warning });
+}
+
+/** Un servicio en móvil: la tabla no cabe, así que cada uno va en su línea. */
+function fichaServicio(e) {
+  return `<div class="item only-narrow">
+  <div class="grow">
+    <div class="title">${esc(e.display_label)}</div>
+    <div class="meta">${esc(e.worker_name)} · ${esc(formatDateShort(e.service_date))}${
+      e.service_time ? ` · ${esc(e.service_time)}` : ''
+    } · ${esc(metodoLegible(e.payment_method))}${e.notes ? ` · ${esc(e.notes)}` : ''}</div>
+  </div>
+  <div class="money">${money(e.amount_cents)}</div>
+  ${
+    e.settlement_id
+      ? '<span class="pill grey nowrap">Pagado</span>'
+      : `<a class="btn ghost small" href="/admin/servicios/${e.id}">Editar</a>`
+  }
+</div>`;
 }
 
 function adminEntryForm({ user, flash, warning, entry, workers, today, ahora }) {
