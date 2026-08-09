@@ -52,6 +52,18 @@ function accountPage({ user, flash, warning }) {
   <p class="sub">Usuario: <strong>${esc(user.username)}</strong> · ${user.role === 'admin' ? 'Administrador (jefe)' : 'Trabajador'}</p>
 </div>
 <div class="card">
+  <h2>El chin-chin de la caja</h2>
+  <p class="sub">Al apuntar un cobro suena una caja registradora y caen billetes por la pantalla.
+     Si estás en un sitio en el que no pega, quítale el sonido: los billetes se quedan.</p>
+  <label style="display:flex;align-items:center;gap:9px;font-weight:500;color:var(--ink)">
+    <input type="checkbox" data-sonido style="width:auto" checked>
+    Que suene al apuntar un cobro
+  </label>
+  <p class="hint">Esto se guarda en este móvil o en este ordenador, no en tu cuenta:
+     cada uno lo pone como quiera.</p>
+</div>
+
+<div class="card">
   <h2>Cambiar mi contraseña</h2>
   <p class="sub">Elige una que recuerdes: mínimo 6 caracteres.</p>
   <form method="post" action="/cuenta/password">

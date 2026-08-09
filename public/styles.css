@@ -277,6 +277,41 @@ details.box > *:not(summary) { margin-top: 10px; }
   th, td { padding: 10px 8px; }
 }
 
+/* ---------- Chin-chin: billetes cayendo al apuntar un cobro ---------- */
+.lluvia {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 60;
+}
+.billete {
+  position: absolute;
+  top: 0;
+  line-height: 1;
+  will-change: transform, opacity;
+  animation-name: caer;
+  animation-timing-function: cubic-bezier(.35, .1, .6, 1);
+  animation-fill-mode: forwards;
+}
+.billete.al-reves { animation-name: caer-al-reves; }
+
+@keyframes caer {
+  from { transform: translateY(-15vh) rotate(0deg); opacity: 0; }
+  12%  { opacity: 1; }
+  to   { transform: translateY(105vh) rotate(300deg); opacity: .85; }
+}
+@keyframes caer-al-reves {
+  from { transform: translateY(-15vh) rotate(0deg); opacity: 0; }
+  12%  { opacity: 1; }
+  to   { transform: translateY(105vh) rotate(-280deg); opacity: .85; }
+}
+
+/* Quien pide menos movimiento no ve caer nada. */
+@media (prefers-reduced-motion: reduce) {
+  .lluvia { display: none; }
+}
+
 /* ---------- Qué se ve en cada ancho ----------
    Estas reglas sólo esconden, nunca imponen un display: así, al mostrarse, cada
    elemento recupera el suyo (una fila sigue siendo flex y una tabla, tabla).

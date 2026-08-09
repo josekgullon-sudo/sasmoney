@@ -35,7 +35,7 @@ function quickForm({ today, ahora, suggestions, action = '/servicios', entry = n
   const isEdit = Boolean(entry);
   const method = isEdit ? entry.payment_method : 'efectivo';
 
-  return `<form method="post" action="${action}" data-once>
+  return `<form method="post" action="${action}" data-once ${isEdit ? '' : 'data-celebrar'}>
   <div class="field">
     <label for="amount">¿Cuánto has cobrado?</label>
     <input id="amount" name="amount" class="amount-input" inputmode="decimal" autocomplete="off"

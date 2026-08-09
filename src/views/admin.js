@@ -648,7 +648,7 @@ ${periodPicker('/admin/servicios', periodo, { worker: filters.worker || '' })}
 <div class="card">
   <h2>Apuntar un servicio a mano</h2>
   <p class="sub">Por si alguien se ha dejado uno sin apuntar.</p>
-  <form method="post" action="/admin/servicios" data-once>
+  <form method="post" action="/admin/servicios" data-once data-celebrar>
     <div class="row">
       <div class="field">
         <label for="a_user">Trabajador</label>
