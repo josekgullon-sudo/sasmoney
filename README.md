@@ -18,7 +18,7 @@ Pensada para usarse desde el móvil: apuntar un cobro son dos toques.
      (*Cliente 1*, *Cliente 2*…). Si quiere, puede poner un nombre o un mote.
    - **La fecha y la hora se ponen solas** con el momento en que lo apunta. Están en
      *Más detalles* por si hay que corregirlas, junto con el método de pago y las notas.
-   - Y al apuntarlo **suena la caja registradora y caen billetes por la pantalla**. Si no
+   - Y al apuntarlo **suena el chin-chin de la caja y caen billetes por la pantalla**. Si no
      pega en ese momento, en *Mi cuenta* se le quita el sonido (los billetes se quedan).
 3. En *Mis cuentas* tiene todo lo suyo en una sola pantalla: lo facturado, lo que lleva
    ganado, cómo sale esa cuenta, lo que aún le deben, la comparación con los meses
@@ -207,11 +207,12 @@ docker run -p 4400:4400 -v sasmoney-data:/data \
   los trabajadores en activo, sin nada que configurar: con dos son la mitad cada uno, y si
   entra un tercero pasan a un tercio automáticamente. Quien está de baja en la aplicación no
   carga con nada.
-- **El chin-chin de la caja no descarga nada**: el sonido lo fabrica el propio navegador con
-  Web Audio, así que no hay ningún fichero de audio de por medio. Tiene que sonar mientras se
+- **El chin-chin de la caja no descarga nada**: son dos notas de maquinita (un si y un mi más
+  arriba, en onda cuadrada) más el tintineo de la moneda, fabricadas por el propio navegador
+  con Web Audio. No hay ningún fichero de audio de por medio. Tiene que sonar mientras se
   pulsa el botón —los navegadores no dejan sonar nada por su cuenta—, así que el cobro se
-  envía tres cuartos de segundo después, con el botón ya en "Guardando…". Si le quitas el
-  sonido no hay ninguna espera. Y si el móvil pide menos animación, no caen billetes.
+  envía seis décimas después, con el botón ya en "Guardando…". Si le quitas el sonido no hay
+  ninguna espera. Y si el móvil pide menos animación, no caen billetes.
 - **Cada trabajadora sólo ve lo suyo.** El acceso a la parte del jefe está cerrado por rol.
 - **Las contraseñas no se pueden probar a lo bruto**: tras 8 fallos seguidos, esa
   combinación de usuario y origen queda bloqueada 15 minutos.
