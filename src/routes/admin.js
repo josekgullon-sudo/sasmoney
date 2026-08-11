@@ -4,16 +4,12 @@ const express = require('express');
 const { db } = require('../db');
 const { requireAdmin, hashPassword, destroyUserSessions } = require('../auth');
 const repo = require('../repo');
-const {
-  calcCommission,
-  parseAmountToCents,
-  formatEuro,
-  COMMISSION_TYPES,
-} = require('../commission');
+const { parseAmountToCents, formatEuro, fmtPercent, COMMISSION_TYPES } = require('../commission');
 const { todayISO, nowHM, isValidTime, isValidDate, formatDate } = require('../util');
 const { resolvePeriod, periodQuery, readVista } = require('../period');
 const expenses = require('../expenses');
 const investment = require('../investment');
+const retention = require('../retention');
 const cajaViews = require('../views/caja');
 const views = require('../views/admin');
 const { PAYMENT_METHODS, metodoLegible } = require('../views/worker');
@@ -36,10 +32,7 @@ router.get('/', (req, res) => {
     .filter((r) => r.user.active || r.count > 0)
     .map((r) => {
     const pending = repo.totalsFor({ userId: r.user.id, from, to, pendingOnly: true });
-    const pendingCalc = calcCommission(r.user, {
-      totalCents: pending.totalCents,
-      serviceCount: pending.count,
-    });
+    const pendingCalc = repo.commissionForTotals(r.user, pending);
     return { ...r, pendingCommissionCents: pendingCalc.commissionCents };
   });
 
@@ -192,13 +185,17 @@ router.get('/liquidacion.csv', (req, res) => {
   const workerId = req.query.worker ? Number(req.query.worker) : null;
   const rows = repo.settlementRows({ from, to, pendingOnly: onlyPending, userId: workerId });
 
-  const lines = [['Trabajador', 'Servicios', 'Facturado', 'Regla', 'A pagar', 'Para la empresa']];
+  const lines = [
+    ['Trabajador', 'Servicios', 'Facturado', 'Regla', 'Comisión', 'Retenido', 'A pagar', 'Para la empresa'],
+  ];
   for (const r of rows) {
     lines.push([
       r.user.name,
       r.count,
       euros(r.totalCents),
       r.calc.label,
+      euros(r.calc.grossCommissionCents),
+      euros(r.calc.retentionCents),
       euros(r.calc.commissionCents),
       euros(r.calc.companyCents),
     ]);
@@ -215,8 +212,33 @@ router.get('/trabajadores', (req, res) => {
       flash: res.locals.flash,
       warning: res.locals.warning,
       workers: repo.listWorkers({ includeInactive: true }),
+      retencion: retention.getRetention(),
     })
   );
+});
+
+/** La retención que se le quita a lo que cobran, y desde cuándo. */
+router.post('/retencion', (req, res) => {
+  const desde = String(req.body.desde || '').trim();
+  if (!isValidDate(desde)) {
+    res.flash('error', 'La fecha de la retención no es válida.');
+    return res.redirect('/admin/trabajadores');
+  }
+  const percent = Number(String(req.body.percent || '').replace(',', '.'));
+  if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+    res.flash('error', 'El porcentaje de retención tiene que estar entre 0 y 100.');
+    return res.redirect('/admin/trabajadores');
+  }
+
+  retention.setRetention({ percent, desde });
+  const puesta = retention.getRetention();
+  res.flash(
+    'ok',
+    puesta.percent > 0
+      ? `Retención guardada: ${fmtPercent(puesta.percent)} de los servicios desde el ${formatDate(puesta.desde)}.`
+      : 'Retención desactivada: los trabajadores cobran su comisión entera.'
+  );
+  res.redirect('/admin/trabajadores');
 });
 
 router.get('/trabajadores/nuevo', (req, res) => {

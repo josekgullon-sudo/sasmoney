@@ -41,7 +41,7 @@ Cinco pantallas, cada una con una pregunta clara:
   la publicidad con el porcentaje que pongas a cada uno, y el resto de gastos a partes
   iguales.
 - **Servicios** — todos los cobros, con filtros y descarga en CSV.
-- **Trabajadores** — altas, contraseñas y cuánto se lleva cada una.
+- **Trabajadores** — altas, contraseñas, cuánto se lleva cada una y la retención.
 
 ### El periodo: no sólo por meses
 
@@ -59,6 +59,32 @@ que puedes guardar en favoritos "los últimos 7 días" o "el 14 de julio" y volv
 Debajo del título siempre pone en una frase qué estás mirando exactamente, para que no haya
 duda entre "el mes entero" y "lo que llevas". Y mientras al periodo le queden días, dos botones
 más dejan elegir entre **Todo el mes** y **Sólo hasta hoy**.
+
+## La retención
+
+De cada servicio **a partir de una fecha** se le descuenta un porcentaje a lo que le tocaba
+cobrar: si le tocaban 100 €, cobra 85 €. Lo retenido se queda en la empresa.
+
+El porcentaje y la fecha los pones tú en **Trabajadores**; de fábrica viene el **15 % desde el
+10 de agosto de 2026**, y con un 0 se desactiva.
+
+Va por la **fecha del servicio**, no por cuándo lo liquides: los servicios anteriores se pagan
+enteros aunque los pagues hoy, así que una liquidación que cruce la fecha sale bien sin
+partirla a mano. Por ejemplo, con el 40 % de comisión y 500 € facturados —250 € del día 9 y
+250 € del día 10—:
+
+| | |
+|---|---|
+| 500,00 € × 40 % | 200,00 € |
+| − Retención 15 % (servicios desde el 10/08/2026) | −15,00 € |
+| **A pagar** | **185,00 €** |
+
+Sólo se retienen los 100 € de comisión del día 10, no los 200 € enteros. Con la regla de
+cantidad fija por servicio lo que cuenta son los servicios, no los euros: de 4 servicios a
+15 €, si dos son posteriores a la fecha, se retiene el 15 % de esos 30 €.
+
+Cambiar el porcentaje **no toca las liquidaciones ya cerradas**: cada una guarda lo que se
+retuvo el día que se cerró.
 
 ## Las tres formas de pagar a una trabajadora
 

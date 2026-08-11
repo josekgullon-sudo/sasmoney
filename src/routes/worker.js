@@ -3,7 +3,7 @@
 const express = require('express');
 const { requireLogin } = require('../auth');
 const repo = require('../repo');
-const { calcCommission, parseAmountToCents, formatEuro } = require('../commission');
+const { parseAmountToCents, formatEuro } = require('../commission');
 const { todayISO, nowHM, isValidTime, currentMonth, monthRange, recentMonths, isValidDate } = require('../util');
 const { resolvePeriod, periodQuery } = require('../period');
 const views = require('../views/worker');
@@ -50,10 +50,7 @@ router.get('/', requireLogin, (req, res) => {
 
   const todayEntries = repo.listEntries({ userId: req.user.id, from: today, to: today });
   const monthTotals = repo.totalsFor({ userId: req.user.id, from, to });
-  const calc = calcCommission(req.user, {
-    totalCents: monthTotals.totalCents,
-    serviceCount: monthTotals.count,
-  });
+  const calc = repo.commissionForTotals(req.user, monthTotals);
 
   res.send(
     views.workerHome({
@@ -147,19 +144,16 @@ router.get('/mis-cuentas', requireLogin, (req, res) => {
 
   const entries = repo.listEntries({ userId: req.user.id, from, to });
   const totalCents = entries.reduce((a, e) => a + e.amount_cents, 0);
-  const calc = calcCommission(req.user, { totalCents, serviceCount: entries.length });
+  const calc = repo.commissionForEntries(req.user, entries);
 
   const pending = repo.totalsFor({ userId: req.user.id, from, to, pendingOnly: true });
-  const pendingCalc = calcCommission(req.user, {
-    totalCents: pending.totalCents,
-    serviceCount: pending.count,
-  });
+  const pendingCalc = repo.commissionForTotals(req.user, pending);
 
   // Los últimos seis meses, para poder compararse consigo misma.
   const historial = recentMonths(6).map((m) => {
     const r = monthRange(m);
     const t = repo.totalsFor({ userId: req.user.id, from: r.from, to: r.to });
-    const c = calcCommission(req.user, { totalCents: t.totalCents, serviceCount: t.count });
+    const c = repo.commissionForTotals(req.user, t);
     return { month: m, count: t.count, totalCents: t.totalCents, commissionCents: c.commissionCents };
   });
 

@@ -46,9 +46,11 @@ function withBaseTier(tiers) {
 /**
  * Calcula lo que hay que pagarle a un trabajador.
  *
- * @param {object} rule       Ficha del trabajador (commission_type, commission_percent, tiers_json, tier_mode, fixed_cents).
- * @param {object} totals     { totalCents, serviceCount }
- * @returns {{commissionCents:number, companyCents:number, label:string, breakdown:Array}}
+ * @param {object} rule    Ficha del trabajador (commission_type, commission_percent, tiers_json, tier_mode, fixed_cents).
+ * @param {object} totals  { totalCents, serviceCount } y, si la hay, la retención:
+ *                         { percent, desde, baseAfectada, baseTotal }.
+ * @returns {{commissionCents:number, grossCommissionCents:number, retentionCents:number,
+ *            companyCents:number, label:string, breakdown:Array}}
  */
 function calcCommission(rule, totals) {
   const totalCents = Math.max(0, Math.round(Number(totals.totalCents) || 0));
@@ -113,13 +115,51 @@ function calcCommission(rule, totals) {
   const capped = Math.min(commissionCents, totalCents);
   const cappedFlag = capped !== commissionCents;
 
+  const retentionCents = calcRetention(totals.retencion, capped);
+  if (retentionCents > 0) {
+    breakdown.push({
+      concept: retentionLabel(totals.retencion),
+      amountCents: -retentionCents,
+    });
+  }
+
   return {
-    commissionCents: capped,
-    companyCents: totalCents - capped,
+    // Lo que le tocaría por su regla, antes de retener nada.
+    grossCommissionCents: capped,
+    retentionCents,
+    // Lo que se le paga de verdad: es esto lo que usa toda la aplicación.
+    commissionCents: capped - retentionCents,
+    companyCents: totalCents - capped + retentionCents,
     label,
     breakdown,
     capped: cappedFlag,
   };
+}
+
+/**
+ * Retención sobre lo que cobra el trabajador.
+ *
+ * Se aplica sólo a los servicios a partir de una fecha, así que hace falta saber
+ * qué parte de la base va con retención y cuál no: `baseAfectada` sobre
+ * `baseTotal`. La base son los euros facturados, salvo con la regla de cantidad
+ * fija por servicio, donde lo que cuenta es el número de servicios.
+ */
+function calcRetention(retencion, commissionCents) {
+  if (!retencion) return 0;
+  const percent = Math.min(100, Math.max(0, Number(retencion.percent) || 0));
+  const baseTotal = Math.max(0, Number(retencion.baseTotal) || 0);
+  const baseAfectada = Math.min(baseTotal, Math.max(0, Number(retencion.baseAfectada) || 0));
+  if (percent === 0 || baseTotal === 0 || baseAfectada === 0) return 0;
+
+  const parteConRetencion = (commissionCents * baseAfectada) / baseTotal;
+  return Math.round((parteConRetencion * percent) / 100);
+}
+
+function retentionLabel(retencion) {
+  const pct = fmtPercent(Math.min(100, Math.max(0, Number(retencion.percent) || 0)));
+  if (!retencion.desde) return `− Retención ${pct}`;
+  const [y, m, d] = String(retencion.desde).split('-');
+  return `− Retención ${pct} (servicios desde el ${d}/${m}/${y})`;
 }
 
 /** Descripción corta de la regla, para listados y fichas. */

@@ -2,6 +2,29 @@
 
 const { db, transaction } = require('./db');
 const { calcCommission } = require('./commission');
+const retention = require('./retention');
+
+/**
+ * Lo que hay que pagarle a un trabajador por unos servicios, ya con la
+ * retención aplicada. Todo el mundo pasa por aquí para que no se le olvide a
+ * nadie: si se calculara la comisión a pelo, se pagaría de más.
+ */
+function commissionForEntries(worker, entries) {
+  return calcCommission(worker, {
+    totalCents: entries.reduce((a, e) => a + e.amount_cents, 0),
+    serviceCount: entries.length,
+    retencion: retention.forEntries(worker, entries),
+  });
+}
+
+/** Igual, pero partiendo de los totales de totalsFor en lugar de la lista. */
+function commissionForTotals(worker, totals) {
+  return calcCommission(worker, {
+    totalCents: totals.totalCents,
+    serviceCount: totals.count,
+    retencion: retention.forTotals(worker, totals),
+  });
+}
 
 /**
  * Selección común de servicios: añade el nombre del trabajador, el del pueblo
@@ -83,17 +106,29 @@ function deleteEntry(id) {
   db.prepare('DELETE FROM entries WHERE id = ? AND settlement_id IS NULL').run(id);
 }
 
-/** Suma y número de servicios de un trabajador en un periodo. */
+/**
+ * Suma y número de servicios de un trabajador en un periodo, y cuánto de eso
+ * cae dentro de la retención (los servicios a partir de su fecha de arranque).
+ */
 function totalsFor({ userId, from, to, pendingOnly = false }) {
+  const desde = retention.getRetention().desde;
   const row = db
     .prepare(
-      `SELECT COUNT(*) AS count, COALESCE(SUM(amount_cents), 0) AS total
+      `SELECT COUNT(*) AS count,
+              COALESCE(SUM(amount_cents), 0) AS total,
+              COALESCE(SUM(CASE WHEN service_date >= @desde THEN 1 ELSE 0 END), 0) AS afectadoCount,
+              COALESCE(SUM(CASE WHEN service_date >= @desde THEN amount_cents ELSE 0 END), 0) AS afectadoCents
          FROM entries
         WHERE user_id = @userId AND service_date >= @from AND service_date <= @to
           ${pendingOnly ? 'AND settlement_id IS NULL' : ''}`
     )
-    .get({ userId, from, to });
-  return { count: row.count, totalCents: row.total };
+    .get({ userId, from, to, desde });
+  return {
+    count: row.count,
+    totalCents: row.total,
+    afectadoCount: row.afectadoCount,
+    afectadoCents: row.afectadoCents,
+  };
 }
 
 function listWorkers({ includeInactive = false } = {}) {
@@ -160,7 +195,7 @@ function settlementRows({ from, to, pendingOnly = true, includeEmpty = false, us
     if (entries.length === 0 && !includeEmpty) continue;
 
     const totalCents = entries.reduce((a, e) => a + e.amount_cents, 0);
-    const calc = calcCommission(worker, { totalCents, serviceCount: entries.length });
+    const calc = commissionForEntries(worker, entries);
     rows.push({ user: worker, entries, count: entries.length, totalCents, calc });
   }
 
@@ -174,7 +209,7 @@ const closeSettlement = transaction(({ worker, from, to, note = '' }) => {
   if (entries.length === 0) return null;
 
   const totalCents = entries.reduce((a, e) => a + e.amount_cents, 0);
-  const calc = calcCommission(worker, { totalCents, serviceCount: entries.length });
+  const calc = commissionForEntries(worker, entries);
 
   const info = db
     .prepare(
@@ -196,6 +231,10 @@ const closeSettlement = transaction(({ worker, from, to, note = '' }) => {
         tier_mode: worker.tier_mode,
         label: calc.label,
         breakdown: calc.breakdown,
+        // Se guarda lo retenido para que la liquidación cerrada se explique sola
+        // aunque luego se cambie el porcentaje.
+        retention: retention.getRetention(),
+        retention_cents: calc.retentionCents,
       }),
       note
     );
@@ -221,6 +260,8 @@ function listSettlements({ userId = null, limit = 50 } = {}) {
 }
 
 module.exports = {
+  commissionForEntries,
+  commissionForTotals,
   listEntries,
   getEntry,
   createEntry,

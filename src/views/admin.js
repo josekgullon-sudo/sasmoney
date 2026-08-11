@@ -420,9 +420,36 @@ Su cuenta de este periodo quedará a cero y esos servicios ya no se podrán modi
 </div>`;
 }
 
-function adminWorkers({ user, flash, warning, workers }) {
+function adminWorkers({ user, flash, warning, workers, retencion }) {
   const body = `
 <h1>Trabajadores</h1>
+
+<div class="card">
+  <h2>Retención sobre lo que cobran</h2>
+  <p class="sub">De cada servicio a partir de la fecha que pongas se le descuenta este porcentaje
+     a lo que le tocaba cobrar: si le tocaban 100 €, cobra ${money(
+       Math.round(10000 * (1 - Math.min(100, Math.max(0, retencion.percent)) / 100))
+     )}. Lo retenido se queda en la empresa.</p>
+  <form method="post" action="/admin/retencion">
+    <div class="row">
+      <div class="field">
+        <label for="r_percent">Porcentaje</label>
+        <input id="r_percent" name="percent" inputmode="decimal"
+               value="${esc(String(retencion.percent).replace('.', ','))}">
+        <div class="hint">Pon 0 para no retener nada.</div>
+      </div>
+      <div class="field">
+        <label for="r_desde">A partir de los servicios del…</label>
+        <input id="r_desde" name="desde" type="date" value="${esc(retencion.desde)}" required>
+        <div class="hint">Los anteriores se pagan enteros, aunque los liquides hoy.</div>
+      </div>
+    </div>
+    <button class="btn" type="submit">Guardar la retención</button>
+  </form>
+  <p class="hint">Sólo afecta a lo que aún esté sin liquidar: las liquidaciones ya cerradas no
+     se tocan.</p>
+</div>
+
 <div class="card">
   <div class="actions" style="margin-bottom:12px">
     <a class="btn" href="/admin/trabajadores/nuevo">+ Nuevo trabajador</a>

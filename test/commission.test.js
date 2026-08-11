@@ -125,3 +125,91 @@ test('describe la regla en una línea', () => {
     /30% \/ 40%/
   );
 });
+
+test('la retención descuenta un porcentaje de lo que iba a cobrar', () => {
+  const regla = { commission_type: 'percent', commission_percent: 40 };
+
+  // Sin retención, lo de siempre.
+  const sin = calcCommission(regla, { totalCents: 100000, serviceCount: 4 });
+  assert.equal(sin.commissionCents, 40000);
+  assert.equal(sin.retentionCents, 0);
+
+  // Con el 15 % sobre todos los servicios: de 400 € cobra 340 €.
+  const todo = calcCommission(regla, {
+    totalCents: 100000,
+    serviceCount: 4,
+    retencion: { percent: 15, desde: '2026-08-10', baseTotal: 100000, baseAfectada: 100000 },
+  });
+  assert.equal(todo.grossCommissionCents, 40000);
+  assert.equal(todo.retentionCents, 6000);
+  assert.equal(todo.commissionCents, 34000);
+  // Lo retenido se queda en la empresa.
+  assert.equal(todo.companyCents, 100000 - 34000);
+});
+
+test('la retención sólo pilla los servicios a partir de su fecha', () => {
+  const regla = { commission_type: 'percent', commission_percent: 40 };
+
+  // La mitad de lo facturado es de antes del 10 de agosto: sólo retiene la otra mitad.
+  const mitad = calcCommission(regla, {
+    totalCents: 100000,
+    serviceCount: 4,
+    retencion: { percent: 15, desde: '2026-08-10', baseTotal: 100000, baseAfectada: 50000 },
+  });
+  assert.equal(mitad.retentionCents, 3000); // 15 % de los 200 € de comisión afectada
+  assert.equal(mitad.commissionCents, 37000);
+
+  // Y si nada cae dentro, no se retiene nada.
+  const nada = calcCommission(regla, {
+    totalCents: 100000,
+    serviceCount: 4,
+    retencion: { percent: 15, desde: '2026-08-10', baseTotal: 100000, baseAfectada: 0 },
+  });
+  assert.equal(nada.retentionCents, 0);
+  assert.equal(nada.commissionCents, 40000);
+});
+
+test('con cantidad fija por servicio la retención va por servicios, no por euros', () => {
+  const regla = { commission_type: 'fixed', fixed_cents: 1500 };
+  // 4 servicios a 15 €, dos de ellos con retención: 60 € − 15 % de 30 € = 55,50 €.
+  const calc = calcCommission(regla, {
+    totalCents: 100000,
+    serviceCount: 4,
+    retencion: { percent: 15, desde: '2026-08-10', baseTotal: 4, baseAfectada: 2 },
+  });
+  assert.equal(calc.grossCommissionCents, 6000);
+  assert.equal(calc.retentionCents, 450);
+  assert.equal(calc.commissionCents, 5550);
+});
+
+test('la retención se explica en el desglose', () => {
+  const calc = calcCommission(
+    { commission_type: 'percent', commission_percent: 40 },
+    {
+      totalCents: 100000,
+      serviceCount: 4,
+      retencion: { percent: 15, desde: '2026-08-10', baseTotal: 100000, baseAfectada: 100000 },
+    }
+  );
+  const linea = calc.breakdown[calc.breakdown.length - 1];
+  assert.equal(linea.concept, '− Retención 15% (servicios desde el 10/08/2026)');
+  assert.equal(linea.amountCents, -6000);
+  // Y el desglose cuadra con lo que se paga.
+  assert.equal(
+    calc.breakdown.reduce((a, b) => a + b.amountCents, 0),
+    calc.commissionCents
+  );
+});
+
+test('un porcentaje de retención de 0 no cambia nada', () => {
+  const calc = calcCommission(
+    { commission_type: 'percent', commission_percent: 40 },
+    {
+      totalCents: 100000,
+      serviceCount: 4,
+      retencion: { percent: 0, desde: '2026-08-10', baseTotal: 100000, baseAfectada: 100000 },
+    }
+  );
+  assert.equal(calc.commissionCents, 40000);
+  assert.equal(calc.breakdown.length, 1);
+});
