@@ -84,8 +84,17 @@ function daysBetween(from, to) {
 
 /** Mes anterior a uno dado: '2026-01' → '2025-12'. */
 function previousMonth(month) {
+  return desplazaMes(month, -1);
+}
+
+/** Mes siguiente a uno dado: '2026-12' → '2027-01'. */
+function nextMonth(month) {
+  return desplazaMes(month, 1);
+}
+
+function desplazaMes(month, cuantos) {
   const [y, m] = String(month).split('-').map(Number);
-  const d = new Date(Date.UTC(y, m - 2, 1));
+  const d = new Date(Date.UTC(y, m - 1 + cuantos, 1));
   return `${pad(d.getUTCFullYear(), 4)}-${pad(d.getUTCMonth() + 1, 2)}`;
 }
 
@@ -177,6 +186,7 @@ module.exports = {
   addDays,
   daysBetween,
   previousMonth,
+  nextMonth,
   monthLabel,
   recentMonths,
   formatDate,

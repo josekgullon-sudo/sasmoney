@@ -5,12 +5,13 @@ const { db } = require('../db');
 const { requireAdmin, hashPassword, destroyUserSessions } = require('../auth');
 const repo = require('../repo');
 const { parseAmountToCents, formatEuro, fmtPercent, COMMISSION_TYPES } = require('../commission');
-const { todayISO, nowHM, isValidTime, isValidDate, formatDate } = require('../util');
-const { resolvePeriod, periodQuery, readVista } = require('../period');
+const { todayISO, nowHM, isValidTime, isValidDate, formatDate, monthRange, monthLabel } = require('../util');
+const { resolvePeriod, periodQuery, readVista, validMonth } = require('../period');
 const expenses = require('../expenses');
 const investment = require('../investment');
 const retention = require('../retention');
 const cajaViews = require('../views/caja');
+const calendarioViews = require('../views/calendario');
 const views = require('../views/admin');
 const { PAYMENT_METHODS, metodoLegible } = require('../views/worker');
 
@@ -665,6 +666,88 @@ router.post('/caja/:id', (req, res) => {
   });
   res.flash('ok', 'Guardado.');
   res.redirect('/admin/caja');
+});
+
+/* ------------------------------------------- El mes día a día de un gasto diario */
+
+router.get('/caja/:id/calendario', (req, res) => {
+  const gasto = expenses.getExpense(Number(req.params.id));
+  if (!gasto) return res.status(404).send('No encontrado.');
+  if (gasto.kind !== 'daily') {
+    res.flash('error', 'El calendario es para los gastos de todos los días.');
+    return res.redirect('/admin/caja');
+  }
+
+  const month = validMonth(req.query.month);
+  const { from, to } = monthRange(month);
+
+  res.send(
+    calendarioViews.adminCalendario({
+      user: req.user,
+      flash: res.locals.flash,
+      warning: res.locals.warning,
+      gasto,
+      month,
+      dias: expenses.rangeOccurrences(gasto, from, to),
+      hoy: todayISO(),
+      volverA: `/admin/caja?month=${month}`,
+    })
+  );
+});
+
+/**
+ * Guarda el mes entero de golpe. Una casilla vacía significa "este día va al
+ * importe de siempre", así que se le quita el ajuste en lugar de guardar un 0.
+ */
+router.post('/caja/:id/calendario', (req, res) => {
+  const gasto = expenses.getExpense(Number(req.params.id));
+  if (!gasto || gasto.kind !== 'daily') return res.status(404).send('No encontrado.');
+
+  const month = validMonth(req.body.month);
+  const { from, to } = monthRange(month);
+  const volver = `/admin/caja/${gasto.id}/calendario?month=${month}`;
+
+  if (req.body.vaciar) {
+    const cuantos = expenses.clearDayAmounts(gasto.id, from, to);
+    res.flash('ok', `Quitados ${cuantos} importe(s) de ${monthLabel(month)}.`);
+    return res.redirect(volver);
+  }
+
+  const dias = [].concat(req.body.dia || []);
+  const importes = [].concat(req.body.importe || []);
+
+  let escritos = 0;
+  let vaciados = 0;
+  let malos = 0;
+
+  expenses.saveDayAmounts(() => {
+    dias.forEach((dia, i) => {
+      if (!isValidDate(dia) || dia < from || dia > to) return;
+      const texto = String(importes[i] ?? '').trim();
+
+      if (texto === '') {
+        if (expenses.setDayAmount(gasto.id, dia, null)) vaciados++;
+        return;
+      }
+      const cents = parseAmountToCents(texto);
+      if (cents === null) {
+        malos++;
+        return;
+      }
+      expenses.setDayAmount(gasto.id, dia, cents);
+      escritos++;
+    });
+  });
+
+  const partes = [];
+  if (escritos) partes.push(`${escritos} día(s) con su importe`);
+  if (vaciados) partes.push(`${vaciados} devuelto(s) al de siempre`);
+  res.flash(
+    malos ? 'error' : 'ok',
+    (partes.length ? `${monthLabel(month)}: ${partes.join(', ')}.` : 'No había nada que cambiar.') +
+      (malos ? ` ${malos} casilla(s) no eran un importe válido y se han dejado como estaban.` : '')
+  );
+  res.redirect(volver);
 });
 
 /** Cambia (o devuelve al normal) el importe de un día suelto. */

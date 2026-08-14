@@ -39,7 +39,8 @@ Cinco pantallas, cada una con una pregunta clara:
 - **Caja** — *¿qué entra y qué sale por fuera de los servicios?* Gastos e ingresos, sueltos o
   recurrentes (**diarios**, mensuales, trimestrales o anuales), y el reparto de la inversión:
   la publicidad con el porcentaje que pongas a cada uno, y el resto de gastos a partes
-  iguales.
+  iguales. Los gastos diarios tienen **un calendario del mes** para apuntar lo que se gastó
+  de verdad cada día.
 - **Servicios** — todos los cobros, con filtros y descarga en CSV.
 - **Trabajadores** — altas, contraseñas, cuánto se lleva cada una y la retención.
 
@@ -221,8 +222,16 @@ docker run -p 4400:4400 -v sasmoney-data:/data \
   puede adivinar.
 - **Un gasto diario cuenta tantas veces como días tenga el mes**: 20 €/día son 620 € en un
   mes de 31 días y 560 € en febrero. Si empieza a mitad de mes, sólo cuentan los días desde
-  esa fecha. Y se puede **cambiar el importe de un día suelto** sin tocar los demás, para los
-  días en que se invierte más o menos.
+  esa fecha.
+- **El calendario del mes** (botón *Día a día* en Caja) es para cuando ese gasto no es igual
+  todos los días, que es lo normal con la publicidad. Sale el mes entero como un calendario de
+  pared, con una casilla por día y un solo botón de guardar:
+  - Lo que **escribes** se queda marcado en verde y es lo que cuenta ese día.
+  - Lo que **dejas en blanco** va al importe de siempre, que aparece en gris de fondo.
+  - **Borrar** una casilla devuelve ese día a lo normal.
+
+  Arriba se ve el total del mes al momento, y hay un botón para vaciar de golpe todo lo
+  escrito a mano de ese mes.
 - **La inversión la repartes tú**: en Caja le pones a cada trabajador su porcentaje fijo
   (60 %, 30 %…) y se aplica tal cual, mes tras mes, hasta que lo cambies. Ese porcentaje y
   los euros que lleva gastados hasta hoy salen en su fila del Resumen. El porcentaje que

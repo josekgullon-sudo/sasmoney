@@ -277,6 +277,50 @@ details.box > *:not(summary) { margin-top: 10px; }
   th, td { padding: 10px 8px; }
 }
 
+/* ---------- Calendario del gasto diario ---------- */
+.calendario {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+.calendario .dia {
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 5px 4px 4px;
+  background: #fff;
+  min-width: 0;
+}
+.calendario .dia .cabeza {
+  display: block;
+  font-size: .68rem;
+  color: var(--ink-soft);
+  text-align: center;
+  margin-bottom: 3px;
+  white-space: nowrap;
+}
+.calendario .dia input {
+  width: 100%;
+  padding: 5px 2px;
+  text-align: center;
+  font-size: .82rem;
+  font-variant-numeric: tabular-nums;
+  border-radius: 6px;
+  min-width: 0;
+}
+/* Los días escritos a mano se distinguen de los que van al importe de siempre:
+   el de siempre va en gris de fondo, lo escrito en negrita y con el borde marcado. */
+.calendario .dia input::placeholder { color: var(--ink-soft); opacity: .5; font-weight: 400; }
+.calendario .dia.escrito { border-color: var(--brand); background: var(--brand-soft); }
+.calendario .dia.escrito input { font-weight: 700; }
+.calendario .dia.es-hoy .cabeza { font-weight: 700; color: var(--brand); }
+
+/* Con siete columnas no cabe en un móvil: se pasa a tres, que sí se pueden tocar. */
+@media (max-width: 560px) {
+  .calendario { grid-template-columns: repeat(3, 1fr); }
+  .calendario .hueco { display: none; }
+}
+
 /* ---------- Chin-chin: billetes cayendo al apuntar un cobro ---------- */
 .lluvia {
   position: fixed;

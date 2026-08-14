@@ -227,48 +227,14 @@ function formularioEdicion(e, esIngreso, diasAjustados, periodo, hoy) {
   ${
     e.kind === 'daily'
       ? `<hr class="divider">
-  <h2>Importe de un día suelto</h2>
-  <p class="sub">Unos días se invierte más y otros menos. Aquí cambias sólo ese día,
-     sin tocar los demás.</p>
-  <form method="post" action="/admin/caja/${e.id}/dia">
-    ${camposPeriodo(periodo)}
-    <div class="row">
-      <div class="field">
-        <label for="dia">Día</label>
-        <input id="dia" name="day" type="date" required value="${esc(hoy)}">
-      </div>
-      <div class="field">
-        <label for="dia_importe">Ese día se gastó</label>
-        <input id="dia_importe" name="amount" inputmode="decimal" required placeholder="0,00">
-      </div>
-      <div style="flex:0 0 auto;margin-bottom:14px"><button class="btn" type="submit">Ajustar</button></div>
-    </div>
-  </form>
-  ${
-    diasAjustados.length === 0
-      ? `<p class="sub">Todos los días de ${esc(periodo.label)} van a ${money(e.amount_cents)}.</p>`
-      : `<div class="table-wrap"><table>
-      <thead><tr><th>Día</th><th class="num">Importe</th><th></th></tr></thead>
-      <tbody>
-        ${diasAjustados
-          .map(
-            (d) => `<tr>
-          <td>${esc(formatDate(d.day))}</td>
-          <td class="num">${money(d.amount_cents)}</td>
-          <td class="right">
-            <form method="post" action="/admin/caja/${e.id}/dia" class="inline">
-              ${camposPeriodo(periodo)}
-              <input type="hidden" name="day" value="${esc(d.day)}">
-              <input type="hidden" name="quitar" value="1">
-              <button class="btn ghost small" type="submit">Volver al normal</button>
-            </form>
-          </td>
-        </tr>`
-          )
-          .join('')}
-      </tbody>
-    </table></div>`
-  }`
+  <h2>Lo que se gastó cada día</h2>
+  <p class="sub">Unos días se invierte más y otros menos. En el calendario del mes pones el
+     importe real de cada día de una vez.${
+       diasAjustados.length
+         ? ` Ahora mismo hay ${diasAjustados.length} día(s) con importe propio en ${esc(periodo.label)}.`
+         : ` De momento todos los días de ${esc(periodo.label)} van a ${money(e.amount_cents)}.`
+     }</p>
+  <a class="btn" href="/admin/caja/${e.id}/calendario?month=${esc(periodo.month || periodo.from.slice(0, 7))}">Abrir el calendario del mes</a>`
       : ''
   }
 </div>`;
@@ -318,6 +284,11 @@ function listaMovimientos(filas, direction) {
           : '<span class="muted">—</span>'
       }</td>
       <td class="right acciones">
+        ${
+          g.kind === 'daily'
+            ? `<a class="btn small" href="/admin/caja/${g.id}/calendario">Día a día</a>`
+            : ''
+        }
         <a class="btn ghost small" href="/admin/caja?editar=${g.id}">Editar</a>
         <form method="post" action="/admin/caja/${g.id}/borrar" class="inline">
           <button class="btn ghost small" type="submit"

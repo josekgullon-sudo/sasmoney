@@ -1,6 +1,6 @@
 'use strict';
 
-const { db } = require('./db');
+const { db, transaction } = require('./db');
 const { todayISO, monthRange, addDays, daysBetween } = require('./util');
 
 /**
@@ -243,17 +243,35 @@ function dayOverrides(expenseId, from, to) {
   return new Map(filas.map((f) => [f.day, f.amount_cents]));
 }
 
-/** Pone (o quita, con null) el importe de un día concreto. */
+/**
+ * Pone (o quita, con null) el importe de un día concreto.
+ * Devuelve true si de verdad ha cambiado algo, para poder contar cuántos días
+ * se han tocado al guardar un mes entero.
+ */
 function setDayAmount(expenseId, day, amountCents) {
   if (amountCents === null) {
-    db.prepare('DELETE FROM expense_days WHERE expense_id = ? AND day = ?').run(expenseId, day);
-    return;
+    const info = db
+      .prepare('DELETE FROM expense_days WHERE expense_id = ? AND day = ?')
+      .run(expenseId, day);
+    return info.changes > 0;
   }
   db.prepare(
     `INSERT INTO expense_days (expense_id, day, amount_cents) VALUES (?, ?, ?)
      ON CONFLICT(expense_id, day) DO UPDATE SET amount_cents = excluded.amount_cents`
   ).run(expenseId, day, amountCents);
+  return true;
 }
+
+/** Quita todos los importes escritos a mano de un gasto entre dos fechas. */
+function clearDayAmounts(expenseId, from, to) {
+  const info = db
+    .prepare('DELETE FROM expense_days WHERE expense_id = ? AND day >= ? AND day <= ?')
+    .run(expenseId, from, to);
+  return info.changes;
+}
+
+/** Guarda un mes entero de golpe: o entran todos los días o no entra ninguno. */
+const saveDayAmounts = transaction((fn) => fn());
 
 /** Días ajustados de un gasto entre dos fechas, ordenados por fecha. */
 function listDayAmounts(expenseId, from, to) {
@@ -426,6 +444,8 @@ module.exports = {
   rangeAccrual,
   coveringDate,
   setDayAmount,
+  clearDayAmounts,
+  saveDayAmounts,
   listDayAmounts,
   listExpenses,
   getExpense,
