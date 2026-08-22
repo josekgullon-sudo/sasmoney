@@ -223,21 +223,36 @@ function trimToAmount(worker, entries, maxCents) {
 }
 
 /**
+ * Traduce el corte "hasta el día X a las Y" a lo que entiende listEntries.
+ *
+ * El corte es un **momento**, no "la hora del último día del periodo": si estás
+ * mirando agosto entero y cortas hoy a las 16:00, se liquida desde el 1 hasta
+ * hoy a las 16:00, no hasta el 31 a las 16:00. Confundir las dos cosas era
+ * justo lo que hacía que el recorte no sirviera para nada.
+ */
+function aplicaCorte({ from, to, corte }) {
+  if (!corte || !corte.fecha) return { to, toTime: null };
+  if (corte.fecha > to) return { to, toTime: null }; // el corte cae fuera: no recorta
+  return { to: corte.fecha, toTime: corte.hora || null };
+}
+
+/**
  * Lo que hay que pagarle a cada trabajador en un periodo.
  *
  * Además del periodo se puede recortar de dos maneras, para poder liquidar sólo
- * una parte: `toTime` corta el último día a una hora, y `maxCents` pone un tope
- * a lo que se va a pagar. Lo que quede fuera sigue pendiente para otro día.
+ * una parte: `corte` ({ fecha, hora }) para hasta cuándo, y `maxCents` para un
+ * tope de lo que se paga. Lo que quede fuera sigue pendiente para otro día.
  */
 function settlementRows({
   from,
   to,
-  toTime = null,
+  corte = null,
   maxCents = null,
   pendingOnly = true,
   includeEmpty = false,
   userId = null,
 }) {
+  const hasta = aplicaCorte({ from, to, corte });
   // Con un trabajador elegido se enseña sólo el suyo, y aunque no tenga nada
   // pendiente: hay que poder ver que ya está todo liquidado.
   const workers = userId
@@ -245,10 +260,16 @@ function settlementRows({
     : listWorkers({ includeInactive: true });
   const rows = [];
 
-  const conLimites = Boolean(toTime) || maxCents !== null;
+  const conLimites = hasta.to !== to || Boolean(hasta.toTime) || maxCents !== null;
 
   for (const worker of workers) {
-    const todos = listEntries({ userId: worker.id, from, to, toTime, pendingOnly });
+    const todos = listEntries({
+      userId: worker.id,
+      from,
+      to: hasta.to,
+      toTime: hasta.toTime,
+      pendingOnly,
+    });
     const entries = maxCents === null ? todos : trimToAmount(worker, todos, maxCents);
     if (entries.length === 0 && !includeEmpty) continue;
 
@@ -275,12 +296,20 @@ function settlementRows({
 }
 
 /** Cierra la liquidación de un trabajador: guarda el resumen y marca sus servicios como pagados. */
-const closeSettlement = transaction(({ worker, from, to, toTime = null, maxCents = null, note = '' }) => {
+const closeSettlement = transaction(({ worker, from, to, corte = null, maxCents = null, note = '' }) => {
+  const hasta = aplicaCorte({ from, to, corte });
+
   // Se cuenta lo pendiente ANTES de marcar nada: después ya estaría cerrado y
   // saldría que no queda nada fuera.
   const pendientesAntes = listEntries({ userId: worker.id, from, to, pendingOnly: true }).length;
 
-  const todos = listEntries({ userId: worker.id, from, to, toTime, pendingOnly: true });
+  const todos = listEntries({
+    userId: worker.id,
+    from,
+    to: hasta.to,
+    toTime: hasta.toTime,
+    pendingOnly: true,
+  });
   const entries = maxCents === null ? todos : trimToAmount(worker, todos, maxCents);
   if (entries.length === 0) return null;
 
@@ -295,7 +324,9 @@ const closeSettlement = transaction(({ worker, from, to, toTime = null, maxCents
     .run(
       worker.id,
       from,
-      to,
+      // Se guarda hasta dónde se liquidó de verdad, no el periodo que se estaba
+      // mirando: si cortaste hoy a las 16:00, el periodo cerrado acaba hoy.
+      hasta.to,
       entries.length,
       totalCents,
       calc.commissionCents,

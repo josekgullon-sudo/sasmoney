@@ -45,14 +45,14 @@ test('sin recortes se liquida el día entero', () => {
 
 test('la hora de corte deja fuera lo de después', () => {
   montaEscenario();
-  const [fila] = soloDelDia({ toTime: '13:00' });
+  const [fila] = soloDelDia({ corte: { fecha: DIA, hora: '13:00' } });
   // Las 13:00 entran: es "hasta las 13:00", no "antes de".
   assert.equal(fila.count, 3);
   assert.equal(fila.calc.commissionCents, 15000);
   assert.equal(fila.fueraCount, 2);
 
-  assert.equal(soloDelDia({ toTime: '08:59' }).length, 0);
-  assert.equal(soloDelDia({ toTime: '23:59' })[0].count, 5);
+  assert.equal(soloDelDia({ corte: { fecha: DIA, hora: '08:59' } }).length, 0);
+  assert.equal(soloDelDia({ corte: { fecha: DIA, hora: '23:59' } })[0].count, 5);
 });
 
 test('la hora de corte sólo recorta el último día, no los anteriores', () => {
@@ -63,7 +63,7 @@ test('la hora de corte sólo recorta el último día, no los anteriores', () => 
   ).run();
 
   // El servicio de las 20:00 del día 11 entra, aunque el corte del 12 sea a las 13:00.
-  const [fila] = repo.settlementRows({ from: '2026-08-11', to: DIA, userId: worker.id, toTime: '13:00' });
+  const [fila] = repo.settlementRows({ from: '2026-08-11', to: DIA, userId: worker.id, corte: { fecha: DIA, hora: '13:00' } });
   assert.equal(fila.count, 4);
 });
 
@@ -86,7 +86,7 @@ test('el tope coge los servicios más antiguos que quepan', () => {
 
 test('los dos recortes se pueden usar a la vez', () => {
   montaEscenario();
-  const [fila] = soloDelDia({ toTime: '13:00', maxCents: 6000 });
+  const [fila] = soloDelDia({ corte: { fecha: DIA, hora: '13:00' }, maxCents: 6000 });
   assert.equal(fila.count, 1);
   assert.equal(fila.calc.commissionCents, 5000);
   // Se avisa de los cuatro que quedan, no sólo de los que quitó el tope.
@@ -96,7 +96,7 @@ test('los dos recortes se pueden usar a la vez', () => {
 test('liquidar a trozos deja el resto pendiente y acaba cuadrando', () => {
   const worker = montaEscenario();
 
-  const primera = repo.closeSettlement({ worker, from: DIA, to: DIA, toTime: '13:00' });
+  const primera = repo.closeSettlement({ worker, from: DIA, to: DIA, corte: { fecha: DIA, hora: '13:00' } });
   assert.equal(primera.entryCount, 3);
   assert.equal(primera.commissionCents, 15000);
   assert.equal(primera.fueraCount, 2);
@@ -120,4 +120,47 @@ test('con un tope que no llega para nada no se cierra nada', () => {
   assert.equal(repo.closeSettlement({ worker, from: DIA, to: DIA, maxCents: 100 }), null);
   // Y no se ha tocado ningún servicio.
   assert.equal(soloDelDia()[0].count, 5);
+});
+
+test('el corte manda sobre el periodo: mirando el mes, se liquida hasta ese día', () => {
+  const worker = montaEscenario();
+  // Un servicio suelto del día siguiente, que no debería entrar.
+  db.prepare(
+    `INSERT INTO entries (user_id, service_date, service_time, amount_cents)
+     VALUES (1, '2026-08-13', '10:00', 10000)`
+  ).run();
+
+  const mes = { from: '2026-08-01', to: '2026-08-31', userId: 1 };
+
+  // Sin corte, el mes entero: los seis servicios.
+  assert.equal(repo.settlementRows(mes)[0].count, 6);
+
+  // "Hasta el 12 a las 16:00" son los cuatro primeros del día 12; ni el de las
+  // 19:00 ni el del día 13. Antes esto no recortaba nada, porque la hora se
+  // aplicaba al 31 de agosto en lugar de al día pedido.
+  const [conCorte] = repo.settlementRows({ ...mes, corte: { fecha: '2026-08-12', hora: '16:00' } });
+  assert.equal(conCorte.count, 4);
+  assert.equal(conCorte.calc.commissionCents, 20000);
+  assert.equal(conCorte.fueraCount, 2);
+
+  // Un corte sin hora se lleva el día entero.
+  assert.equal(repo.settlementRows({ ...mes, corte: { fecha: '2026-08-12' } })[0].count, 5);
+  // Y un corte posterior al periodo no recorta nada.
+  assert.equal(repo.settlementRows({ ...mes, corte: { fecha: '2026-09-30', hora: '01:00' } })[0].count, 6);
+});
+
+test('al cerrar con corte se guarda hasta dónde se liquidó de verdad', () => {
+  const worker = montaEscenario();
+  const hecho = repo.closeSettlement({
+    worker,
+    from: '2026-08-01',
+    to: '2026-08-31',
+    corte: { fecha: DIA, hora: '13:00' },
+  });
+  assert.equal(hecho.entryCount, 3);
+
+  const [guardada] = repo.listSettlements({ userId: 1 });
+  assert.equal(guardada.period_from, '2026-08-01');
+  // No pone el 31 de agosto: pone el día en el que se cortó.
+  assert.equal(guardada.period_to, DIA);
 });

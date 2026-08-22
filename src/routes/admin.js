@@ -150,6 +150,8 @@ router.get('/liquidacion', (req, res) => {
       to,
       onlyPending,
       limites,
+      hoy: todayISO(),
+      ahora: nowHM(),
       rows,
       totals,
       workers: repo.listWorkers({ includeInactive: true }),
@@ -188,7 +190,6 @@ router.post('/liquidacion/cerrar', (req, res) => {
   }
 
   const qs = new URLSearchParams({ from, to, only_pending: '1', worker: String(worker.id) });
-  if (limites.toTime) qs.set('hasta_hora', limites.toTime);
   res.redirect(`/admin/liquidacion?${qs}`);
 });
 
@@ -835,25 +836,41 @@ function readAdminEntryForm(body) {
 }
 
 /**
- * Los dos recortes de la liquidación: hasta qué hora del último día y cuánto
- * como mucho. Los dos son opcionales; lo que no venga o no valga se ignora.
+ * Los dos recortes de la liquidación: hasta qué momento (día y, si se quiere,
+ * hora) y cuánto como mucho. Los dos son opcionales; lo que no venga o no valga
+ * se ignora. Una hora suelta sin fecha no significa nada, así que se descarta.
  */
 function readLimites(source) {
+  const fecha = String(source.hasta_fecha || '').trim();
   const hora = String(source.hasta_hora || '').trim();
   const tope = String(source.max || '').trim();
   const maxCents = tope ? parseAmountToCents(tope) : null;
+
   return {
-    toTime: isValidTime(hora) ? hora : null,
+    corte: isValidDate(fecha) ? { fecha, hora: isValidTime(hora) ? hora : null } : null,
     maxCents: maxCents !== null && maxCents >= 0 ? maxCents : null,
   };
 }
 
 /** Deja escrito en la liquidación con qué recortes se cerró. */
-function notaDe({ toTime, maxCents }) {
+function notaDe({ corte, maxCents }) {
   const partes = [];
-  if (toTime) partes.push(`hasta las ${toTime}`);
+  if (corte) {
+    partes.push(`hasta el ${formatDate(corte.fecha)}${corte.hora ? ` a las ${corte.hora}` : ''}`);
+  }
   if (maxCents !== null) partes.push(`tope de ${formatEuro(maxCents)}`);
   return partes.join(', ');
+}
+
+/** El corte puesto en dirección web, para no perderlo al recargar. */
+function corteQuery(limites) {
+  const q = {};
+  if (limites.corte) {
+    q.hasta_fecha = limites.corte.fecha;
+    if (limites.corte.hora) q.hasta_hora = limites.corte.hora;
+  }
+  if (limites.maxCents !== null) q.max = (limites.maxCents / 100).toFixed(2);
+  return q;
 }
 
 /**

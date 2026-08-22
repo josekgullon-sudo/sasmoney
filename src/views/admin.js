@@ -13,6 +13,27 @@ function primeraMayuscula(texto) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/** El corte de la liquidación, escondido en el formulario que la cierra. */
+function camposCorte({ corte, maxCents }) {
+  return [
+    corte ? `<input type="hidden" name="hasta_fecha" value="${esc(corte.fecha)}">` : '',
+    corte && corte.hora ? `<input type="hidden" name="hasta_hora" value="${esc(corte.hora)}">` : '',
+    maxCents === null ? '' : `<input type="hidden" name="max" value="${(maxCents / 100).toFixed(2)}">`,
+  ].join('');
+}
+
+/** El mismo corte, pero para pegarlo a una dirección. */
+function corteEnDireccion({ corte, maxCents }) {
+  const q = new URLSearchParams();
+  if (corte) {
+    q.set('hasta_fecha', corte.fecha);
+    if (corte.hora) q.set('hasta_hora', corte.hora);
+  }
+  if (maxCents !== null) q.set('max', (maxCents / 100).toFixed(2));
+  const texto = q.toString();
+  return texto ? `&${texto}` : '';
+}
+
 /** El periodo escondido dentro de otro formulario, para no perderlo al filtrar. */
 function camposPeriodo(periodo) {
   return periodo.month
@@ -258,7 +279,9 @@ function filaMes(concepto, [primero, segundo], enCurso, signo = '') {
   </tr>`;
 }
 
-function adminSettlement({ user, flash, warning, periodo, from, to, onlyPending, limites, rows, totals, history, workers, workerId }) {
+function adminSettlement({ user, flash, warning, periodo, from, to, onlyPending, limites, hoy, ahora, rows, totals, history, workers, workerId }) {
+  const corte = limites.corte;
+  const topeTexto = limites.maxCents === null ? '' : (limites.maxCents / 100).toFixed(2).replace('.', ',');
   const elegida = workerId ? workers.find((w) => w.id === workerId) : null;
   const body = `
 <h1>Liquidación${elegida ? ` de ${esc(elegida.name)}` : ''}</h1>
@@ -294,21 +317,37 @@ ${periodPicker('/admin/liquidacion', periodo, {
     </label>
   </div>
 
-  <details class="box" ${limites.toTime || limites.maxCents !== null ? 'open' : ''}>
+  <details class="box" ${corte || limites.maxCents !== null ? 'open' : ''}>
     <summary>Liquidar sólo una parte</summary>
     <p class="sub">Para pagar a cuenta: lo que se quede fuera sigue pendiente para otro día.</p>
     <div class="row">
       <div class="field">
-        <label for="hasta_hora">Del último día, sólo hasta las…</label>
-        <input id="hasta_hora" name="hasta_hora" type="time" value="${esc(limites.toTime || '')}">
-        <div class="hint">Vacío = el día entero.</div>
+        <label for="hasta_fecha">Liquidar todo hasta el día</label>
+        <input id="hasta_fecha" name="hasta_fecha" type="date" value="${esc(corte ? corte.fecha : '')}">
+      </div>
+      <div class="field">
+        <label for="hasta_hora">…y a las</label>
+        <input id="hasta_hora" name="hasta_hora" type="time" value="${esc(corte ? corte.hora || '' : '')}">
+        <div class="hint">Vacío = ese día entero.</div>
       </div>
       <div class="field">
         <label for="max">Pagar como mucho</label>
         <input id="max" name="max" inputmode="decimal" placeholder="Todo lo que deba"
-               value="${limites.maxCents === null ? '' : esc((limites.maxCents / 100).toFixed(2).replace('.', ','))}">
+               value="${esc(topeTexto)}">
         <div class="hint">Se cierran los servicios más antiguos que quepan.</div>
       </div>
+    </div>
+    <p class="hint">El día del corte manda sobre el periodo de arriba: aunque estés mirando el mes
+       entero, si cortas hoy sólo se liquida hasta hoy.</p>
+    <div class="actions">
+      <a class="btn ghost small" href="/admin/liquidacion?from=${esc(from)}&to=${esc(
+        to
+      )}&only_pending=1${workerId ? `&worker=${workerId}` : ''}&hasta_fecha=${esc(hoy)}&hasta_hora=${esc(
+        ahora
+      )}">Hasta ahora mismo (${esc(ahora)})</a>
+      <a class="btn ghost small" href="/admin/liquidacion?from=${esc(from)}&to=${esc(
+        to
+      )}&only_pending=1${workerId ? `&worker=${workerId}` : ''}">Quitar los recortes</a>
     </div>
   </details>
 
@@ -340,9 +379,7 @@ ${stats([
   <div class="actions no-print" style="margin-top:14px">
     <a class="btn ghost" href="/admin/liquidacion.csv?from=${esc(from)}&to=${esc(to)}&only_pending=${
       onlyPending ? 1 : 0
-    }${workerId ? `&worker=${workerId}` : ''}${
-      limites.toTime ? `&hasta_hora=${esc(limites.toTime)}` : ''
-    }${limites.maxCents === null ? '' : `&max=${(limites.maxCents / 100).toFixed(2)}`}">Descargar CSV</a>
+    }${workerId ? `&worker=${workerId}` : ''}${esc(corteEnDireccion(limites))}">Descargar CSV</a>
     <button class="btn ghost" type="button" onclick="window.print()">Imprimir</button>
   </div>
 </div>
@@ -438,12 +475,7 @@ function settlementCard(r, { from, to, onlyPending, limites }) {
       <input type="hidden" name="user_id" value="${r.user.id}">
       <input type="hidden" name="from" value="${esc(from)}">
       <input type="hidden" name="to" value="${esc(to)}">
-      ${limites.toTime ? `<input type="hidden" name="hasta_hora" value="${esc(limites.toTime)}">` : ''}
-      ${
-        limites.maxCents === null
-          ? ''
-          : `<input type="hidden" name="max" value="${esc((limites.maxCents / 100).toFixed(2))}">`
-      }
+      ${camposCorte(limites)}
       <button class="btn big" type="submit" data-confirm="Vas a dar por pagados ${r.count} servicio(s) de ${esc(
         r.user.name
       )} por ${money(r.calc.commissionCents)}.

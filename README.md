@@ -93,8 +93,10 @@ retuvo el día que se cerró.
 A veces no se paga todo de golpe. En *Liquidar*, dentro de **Liquidar sólo una parte**, hay dos
 recortes que se pueden usar sueltos o juntos:
 
-- **Del último día, sólo hasta las…** — corta el último día a una hora. Los servicios de
-  después de esa hora se quedan pendientes. Los días anteriores entran enteros.
+- **Liquidar todo hasta el día X a las Y** — un momento de corte. El día del corte **manda
+  sobre el periodo de arriba**: aunque estés mirando agosto entero, si cortas hoy a las 16:00
+  se liquida del 1 hasta hoy a las 16:00. La hora es opcional (vacía = ese día entero), y hay
+  un botón de *Hasta ahora mismo* que pone el día y la hora de este momento.
 - **Pagar como mucho** — un tope de lo que vas a pagar. Se cierran los servicios **más
   antiguos** que quepan dentro de ese tope, que es lo justo: primero se salda lo que lleva más
   tiempo debiéndose.
@@ -103,8 +105,9 @@ Lo que ves en pantalla antes de pulsar es exactamente lo que se va a cerrar, con
 cuántos servicios se quedan fuera. Puedes liquidar en varios trozos y las cuentas cuadran: tres
 liquidaciones parciales de un día suman lo mismo que una sola del día entero.
 
-Los recortes quedan anotados en la liquidación cerrada (*"hasta las 13:00"*, *"tope de
-60,00 €"*), para saber por qué esa vez se pagó menos.
+Los recortes quedan anotados en la liquidación cerrada (*"hasta el 22/08/2026 a las 16:00"*,
+*"tope de 60,00 €"*), y el periodo que se guarda es hasta donde se liquidó de verdad, no el que
+estabas mirando.
 
 Cada trozo se calcula con la regla completa del trabajador, no repartiendo un total: con
 tramos, la comisión no es proporcional a cada servicio, así que la única manera de saber lo que
