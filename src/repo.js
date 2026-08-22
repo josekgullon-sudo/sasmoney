@@ -44,7 +44,14 @@ const ENTRY_SELECT = `
   LEFT JOIN towns t ON t.id = e.town_id
 `;
 
-function listEntries({ userId = null, from = null, to = null, townId = null, pendingOnly = false } = {}) {
+function listEntries({
+  userId = null,
+  from = null,
+  to = null,
+  toTime = null,
+  townId = null,
+  pendingOnly = false,
+} = {}) {
   const where = [];
   const params = {};
   if (userId) {
@@ -56,7 +63,16 @@ function listEntries({ userId = null, from = null, to = null, townId = null, pen
     params.from = from;
   }
   if (to) {
-    where.push('e.service_date <= @to');
+    if (toTime) {
+      // El último día se corta a una hora: los servicios de después no entran.
+      // Si a alguno le faltara la hora, se cuenta como de primera hora del día.
+      where.push(
+        "(e.service_date < @to OR (e.service_date = @to AND COALESCE(NULLIF(e.service_time, ''), '00:00') <= @toTime))"
+      );
+      params.toTime = toTime;
+    } else {
+      where.push('e.service_date <= @to');
+    }
     params.to = to;
   }
   if (townId) {
@@ -182,7 +198,46 @@ function commonAmounts(userId, limit = 4) {
  * Calcula la liquidación de cada trabajador en un periodo.
  * Devuelve una fila por trabajador con sus servicios, totales y comisión.
  */
-function settlementRows({ from, to, pendingOnly = true, includeEmpty = false, userId = null }) {
+/**
+ * Recorta la lista de servicios para que lo que hay que pagar no pase de un tope.
+ *
+ * Se cogen los más antiguos primero, que es lo justo: primero se salda lo que
+ * lleva más tiempo debiéndose. Y se prueba servicio a servicio en lugar de
+ * repartir el total, porque con tramos la comisión no es proporcional a cada
+ * servicio: la única manera de saber lo que se paga por un grupo es calcularlo.
+ */
+function trimToAmount(worker, entries, maxCents) {
+  const antiguosPrimero = [...entries].sort(
+    (a, b) => a.service_date.localeCompare(b.service_date) || a.id - b.id
+  );
+
+  const dentro = [];
+  for (const e of antiguosPrimero) {
+    dentro.push(e);
+    if (commissionForEntries(worker, dentro).commissionCents > maxCents) {
+      dentro.pop();
+      break;
+    }
+  }
+  return dentro;
+}
+
+/**
+ * Lo que hay que pagarle a cada trabajador en un periodo.
+ *
+ * Además del periodo se puede recortar de dos maneras, para poder liquidar sólo
+ * una parte: `toTime` corta el último día a una hora, y `maxCents` pone un tope
+ * a lo que se va a pagar. Lo que quede fuera sigue pendiente para otro día.
+ */
+function settlementRows({
+  from,
+  to,
+  toTime = null,
+  maxCents = null,
+  pendingOnly = true,
+  includeEmpty = false,
+  userId = null,
+}) {
   // Con un trabajador elegido se enseña sólo el suyo, y aunque no tenga nada
   // pendiente: hay que poder ver que ya está todo liquidado.
   const workers = userId
@@ -190,13 +245,29 @@ function settlementRows({ from, to, pendingOnly = true, includeEmpty = false, us
     : listWorkers({ includeInactive: true });
   const rows = [];
 
+  const conLimites = Boolean(toTime) || maxCents !== null;
+
   for (const worker of workers) {
-    const entries = listEntries({ userId: worker.id, from, to, pendingOnly });
+    const todos = listEntries({ userId: worker.id, from, to, toTime, pendingOnly });
+    const entries = maxCents === null ? todos : trimToAmount(worker, todos, maxCents);
     if (entries.length === 0 && !includeEmpty) continue;
+
+    // Cuántos se quedan fuera contando los dos recortes, el de la hora y el del
+    // tope, para poder avisar de que eso sigue debiéndose.
+    const sinRecortar = conLimites
+      ? listEntries({ userId: worker.id, from, to, pendingOnly }).length
+      : entries.length;
 
     const totalCents = entries.reduce((a, e) => a + e.amount_cents, 0);
     const calc = commissionForEntries(worker, entries);
-    rows.push({ user: worker, entries, count: entries.length, totalCents, calc });
+    rows.push({
+      user: worker,
+      entries,
+      count: entries.length,
+      totalCents,
+      calc,
+      fueraCount: sinRecortar - entries.length,
+    });
   }
 
   rows.sort((a, b) => b.calc.commissionCents - a.calc.commissionCents);
@@ -204,8 +275,13 @@ function settlementRows({ from, to, pendingOnly = true, includeEmpty = false, us
 }
 
 /** Cierra la liquidación de un trabajador: guarda el resumen y marca sus servicios como pagados. */
-const closeSettlement = transaction(({ worker, from, to, note = '' }) => {
-  const entries = listEntries({ userId: worker.id, from, to, pendingOnly: true });
+const closeSettlement = transaction(({ worker, from, to, toTime = null, maxCents = null, note = '' }) => {
+  // Se cuenta lo pendiente ANTES de marcar nada: después ya estaría cerrado y
+  // saldría que no queda nada fuera.
+  const pendientesAntes = listEntries({ userId: worker.id, from, to, pendingOnly: true }).length;
+
+  const todos = listEntries({ userId: worker.id, from, to, toTime, pendingOnly: true });
+  const entries = maxCents === null ? todos : trimToAmount(worker, todos, maxCents);
   if (entries.length === 0) return null;
 
   const totalCents = entries.reduce((a, e) => a + e.amount_cents, 0);
@@ -243,7 +319,12 @@ const closeSettlement = transaction(({ worker, from, to, note = '' }) => {
   const mark = db.prepare('UPDATE entries SET settlement_id = ? WHERE id = ?');
   for (const e of entries) mark.run(settlementId, e.id);
 
-  return { settlementId, entryCount: entries.length, commissionCents: calc.commissionCents };
+  return {
+    settlementId,
+    entryCount: entries.length,
+    commissionCents: calc.commissionCents,
+    fueraCount: pendientesAntes - entries.length,
+  };
 });
 
 function listSettlements({ userId = null, limit = 50 } = {}) {

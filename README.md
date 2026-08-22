@@ -35,7 +35,8 @@ Cinco pantallas, cada una con una pregunta clara:
   Mientras el mes está en marcha eliges si quieres verlo entero o sólo hasta hoy.
 - **Liquidar** — *¿cuánto le pago a X?* Eliges una trabajadora o todas. Cuando le
   pagues, pulsas *Liquidado* y su cuenta de ese periodo vuelve a cero: esos servicios quedan
-  cerrados y ya no se cuentan otra vez ni se pueden modificar.
+  cerrados y ya no se cuentan otra vez ni se pueden modificar. Y si sólo le pagas una parte,
+  se puede recortar (ver abajo).
 - **Caja** — *¿qué entra y qué sale por fuera de los servicios?* Gastos e ingresos, sueltos o
   recurrentes (**diarios**, mensuales, trimestrales o anuales), y el reparto de la inversión:
   la publicidad con el porcentaje que pongas a cada uno, y el resto de gastos a partes
@@ -86,6 +87,28 @@ cantidad fija por servicio lo que cuenta son los servicios, no los euros: de 4 s
 
 Cambiar el porcentaje **no toca las liquidaciones ya cerradas**: cada una guarda lo que se
 retuvo el día que se cerró.
+
+## Liquidar sólo una parte
+
+A veces no se paga todo de golpe. En *Liquidar*, dentro de **Liquidar sólo una parte**, hay dos
+recortes que se pueden usar sueltos o juntos:
+
+- **Del último día, sólo hasta las…** — corta el último día a una hora. Los servicios de
+  después de esa hora se quedan pendientes. Los días anteriores entran enteros.
+- **Pagar como mucho** — un tope de lo que vas a pagar. Se cierran los servicios **más
+  antiguos** que quepan dentro de ese tope, que es lo justo: primero se salda lo que lleva más
+  tiempo debiéndose.
+
+Lo que ves en pantalla antes de pulsar es exactamente lo que se va a cerrar, con un aviso de
+cuántos servicios se quedan fuera. Puedes liquidar en varios trozos y las cuentas cuadran: tres
+liquidaciones parciales de un día suman lo mismo que una sola del día entero.
+
+Los recortes quedan anotados en la liquidación cerrada (*"hasta las 13:00"*, *"tope de
+60,00 €"*), para saber por qué esa vez se pagó menos.
+
+Cada trozo se calcula con la regla completa del trabajador, no repartiendo un total: con
+tramos, la comisión no es proporcional a cada servicio, así que la única manera de saber lo que
+se paga por un grupo es calcularlo sobre ese grupo.
 
 ## Las tres formas de pagar a una trabajadora
 

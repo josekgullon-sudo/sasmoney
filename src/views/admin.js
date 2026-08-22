@@ -258,7 +258,7 @@ function filaMes(concepto, [primero, segundo], enCurso, signo = '') {
   </tr>`;
 }
 
-function adminSettlement({ user, flash, warning, periodo, from, to, onlyPending, rows, totals, history, workers, workerId }) {
+function adminSettlement({ user, flash, warning, periodo, from, to, onlyPending, limites, rows, totals, history, workers, workerId }) {
   const elegida = workerId ? workers.find((w) => w.id === workerId) : null;
   const body = `
 <h1>Liquidación${elegida ? ` de ${esc(elegida.name)}` : ''}</h1>
@@ -293,6 +293,25 @@ ${periodPicker('/admin/liquidacion', periodo, {
       Contar sólo lo que aún no he pagado
     </label>
   </div>
+
+  <details class="box" ${limites.toTime || limites.maxCents !== null ? 'open' : ''}>
+    <summary>Liquidar sólo una parte</summary>
+    <p class="sub">Para pagar a cuenta: lo que se quede fuera sigue pendiente para otro día.</p>
+    <div class="row">
+      <div class="field">
+        <label for="hasta_hora">Del último día, sólo hasta las…</label>
+        <input id="hasta_hora" name="hasta_hora" type="time" value="${esc(limites.toTime || '')}">
+        <div class="hint">Vacío = el día entero.</div>
+      </div>
+      <div class="field">
+        <label for="max">Pagar como mucho</label>
+        <input id="max" name="max" inputmode="decimal" placeholder="Todo lo que deba"
+               value="${limites.maxCents === null ? '' : esc((limites.maxCents / 100).toFixed(2).replace('.', ','))}">
+        <div class="hint">Se cierran los servicios más antiguos que quepan.</div>
+      </div>
+    </div>
+  </details>
+
   <button class="btn big block" type="submit">Calcular lo que tengo que pagar</button>
 </form>
 
@@ -314,12 +333,16 @@ ${stats([
               ? `<div class="banner ok" style="margin:0 0 12px">
                    <strong>${esc(r.user.name)}</strong>: no queda nada pendiente en este periodo. Está todo liquidado.
                  </div>`
-              : settlementCard(r, { from, to, onlyPending })
+              : settlementCard(r, { from, to, onlyPending, limites })
           )
           .join('')
   }
   <div class="actions no-print" style="margin-top:14px">
-    <a class="btn ghost" href="/admin/liquidacion.csv?from=${esc(from)}&to=${esc(to)}&only_pending=${onlyPending ? 1 : 0}${workerId ? `&worker=${workerId}` : ''}">Descargar CSV</a>
+    <a class="btn ghost" href="/admin/liquidacion.csv?from=${esc(from)}&to=${esc(to)}&only_pending=${
+      onlyPending ? 1 : 0
+    }${workerId ? `&worker=${workerId}` : ''}${
+      limites.toTime ? `&hasta_hora=${esc(limites.toTime)}` : ''
+    }${limites.maxCents === null ? '' : `&max=${(limites.maxCents / 100).toFixed(2)}`}">Descargar CSV</a>
     <button class="btn ghost" type="button" onclick="window.print()">Imprimir</button>
   </div>
 </div>
@@ -337,7 +360,9 @@ ${stats([
             (s) => `<tr>
           <td class="small">${esc(formatStamp(s.created_at))}</td>
           <td>${esc(s.worker_name)}</td>
-          <td class="small">${esc(formatDate(s.period_from))} – ${esc(formatDate(s.period_to))}</td>
+          <td class="small">${esc(formatDate(s.period_from))} – ${esc(formatDate(s.period_to))}${
+            s.note ? `<div class="muted">${esc(s.note)}</div>` : ''
+          }</td>
           <td class="num">${s.entry_count}</td>
           <td class="num">${money(s.total_cents)}</td>
           <td class="num"><strong>${money(s.commission_cents)}</strong></td>
@@ -352,7 +377,7 @@ ${stats([
   return layout({ title: 'Liquidación', user, body, active: 'liquidacion', flash, warning });
 }
 
-function settlementCard(r, { from, to, onlyPending }) {
+function settlementCard(r, { from, to, onlyPending, limites }) {
   return `<div class="card" style="box-shadow:none;margin-bottom:12px">
   <div class="item" style="border:0;padding-top:0">
     <div class="grow">
@@ -361,6 +386,13 @@ function settlementCard(r, { from, to, onlyPending }) {
     </div>
     <div class="money" style="font-size:1.25rem">${money(r.calc.commissionCents)}</div>
   </div>
+  ${
+    r.fueraCount > 0
+      ? `<p class="sub">Se van a cerrar <strong>${r.count} servicio(s)</strong> por
+         <strong>${money(r.calc.commissionCents)}</strong>. Los otros
+         <strong>${r.fueraCount}</strong> se quedan pendientes para otro día.</p>`
+      : ''
+  }
 
   <details class="box">
     <summary>Ver el desglose</summary>
@@ -406,6 +438,12 @@ function settlementCard(r, { from, to, onlyPending }) {
       <input type="hidden" name="user_id" value="${r.user.id}">
       <input type="hidden" name="from" value="${esc(from)}">
       <input type="hidden" name="to" value="${esc(to)}">
+      ${limites.toTime ? `<input type="hidden" name="hasta_hora" value="${esc(limites.toTime)}">` : ''}
+      ${
+        limites.maxCents === null
+          ? ''
+          : `<input type="hidden" name="max" value="${esc((limites.maxCents / 100).toFixed(2))}">`
+      }
       <button class="btn big" type="submit" data-confirm="Vas a dar por pagados ${r.count} servicio(s) de ${esc(
         r.user.name
       )} por ${money(r.calc.commissionCents)}.

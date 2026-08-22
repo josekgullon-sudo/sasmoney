@@ -115,6 +115,7 @@ router.get('/liquidacion', (req, res) => {
   const periodo = resolvePeriod(req.query);
   const { from, to } = periodo;
   const onlyPending = readOnlyPending(req.query);
+  const limites = readLimites(req.query);
   const workerId = req.query.worker ? Number(req.query.worker) : null;
   const worker = workerId ? repo.getUser(workerId) : null;
   const soloUno = Boolean(worker && worker.role === 'worker');
@@ -122,6 +123,7 @@ router.get('/liquidacion', (req, res) => {
   const rows = repo.settlementRows({
     from,
     to,
+    ...limites,
     pendingOnly: onlyPending,
     userId: soloUno ? worker.id : null,
     // Con uno elegido se muestra siempre, para poder ver que ya está liquidado.
@@ -147,6 +149,7 @@ router.get('/liquidacion', (req, res) => {
       from,
       to,
       onlyPending,
+      limites,
       rows,
       totals,
       workers: repo.listWorkers({ includeInactive: true }),
@@ -160,31 +163,46 @@ router.post('/liquidacion/cerrar', (req, res) => {
   const worker = repo.getUser(Number(req.body.user_id));
   const from = String(req.body.from || '');
   const to = String(req.body.to || '');
+  const limites = readLimites(req.body);
 
   if (!worker || worker.role !== 'worker' || !isValidDate(from) || !isValidDate(to)) {
     res.flash('error', 'No he podido cerrar esa liquidación.');
     return res.redirect('/admin/liquidacion');
   }
 
-  const result = repo.closeSettlement({ worker, from, to });
+  const result = repo.closeSettlement({ worker, from, to, ...limites, note: notaDe(limites) });
   if (!result) {
-    res.flash('error', `${worker.name} no tiene nada pendiente en ese periodo.`);
+    res.flash(
+      'error',
+      limites.maxCents !== null
+        ? `Con ese tope no cabe ni un servicio de ${worker.name}: sube el importe.`
+        : `${worker.name} no tiene nada pendiente en ese periodo.`
+    );
   } else {
     res.flash(
       'ok',
       `Liquidación cerrada: ${worker.name}, ${result.entryCount} servicio(s), ${formatEuro(
         result.commissionCents
-      )}.`
+      )}.` + (result.fueraCount > 0 ? ` Le quedan ${result.fueraCount} servicio(s) sin liquidar.` : '')
     );
   }
-  res.redirect(`/admin/liquidacion?from=${from}&to=${to}&only_pending=1&worker=${worker.id}`);
+
+  const qs = new URLSearchParams({ from, to, only_pending: '1', worker: String(worker.id) });
+  if (limites.toTime) qs.set('hasta_hora', limites.toTime);
+  res.redirect(`/admin/liquidacion?${qs}`);
 });
 
 router.get('/liquidacion.csv', (req, res) => {
   const { from, to } = resolvePeriod(req.query);
   const onlyPending = readOnlyPending(req.query);
   const workerId = req.query.worker ? Number(req.query.worker) : null;
-  const rows = repo.settlementRows({ from, to, pendingOnly: onlyPending, userId: workerId });
+  const rows = repo.settlementRows({
+    from,
+    to,
+    ...readLimites(req.query),
+    pendingOnly: onlyPending,
+    userId: workerId,
+  });
 
   const lines = [
     ['Trabajador', 'Servicios', 'Facturado', 'Regla', 'Comisión', 'Retenido', 'A pagar', 'Para la empresa'],
@@ -814,6 +832,28 @@ function readAdminEntryForm(body) {
       notes: String(body.notes || '').trim().slice(0, 200),
     },
   };
+}
+
+/**
+ * Los dos recortes de la liquidación: hasta qué hora del último día y cuánto
+ * como mucho. Los dos son opcionales; lo que no venga o no valga se ignora.
+ */
+function readLimites(source) {
+  const hora = String(source.hasta_hora || '').trim();
+  const tope = String(source.max || '').trim();
+  const maxCents = tope ? parseAmountToCents(tope) : null;
+  return {
+    toTime: isValidTime(hora) ? hora : null,
+    maxCents: maxCents !== null && maxCents >= 0 ? maxCents : null,
+  };
+}
+
+/** Deja escrito en la liquidación con qué recortes se cerró. */
+function notaDe({ toTime, maxCents }) {
+  const partes = [];
+  if (toTime) partes.push(`hasta las ${toTime}`);
+  if (maxCents !== null) partes.push(`tope de ${formatEuro(maxCents)}`);
+  return partes.join(', ');
 }
 
 /**
