@@ -265,3 +265,56 @@ test('mirando un solo día siguen apareciendo los gastos que se repiten', () => 
   assert.equal(gestoria.prorrateado, true);
   assert.ok(gestoria.total_cents > 0 && gestoria.total_cents < 9300);
 });
+
+test('al importe sin IVA se le suma el IVA al contarlo', () => {
+  const { conIva } = require('../src/expenses');
+  assert.equal(conIva(2000, 21), 2420);
+  assert.equal(conIva(50000, 21), 60500);
+  assert.equal(conIva(1000, 10), 1100);
+  // Con 0 no se toca nada: el importe ya lo lleva dentro.
+  assert.equal(conIva(2000, 0), 2000);
+  assert.equal(conIva(2000, null), 2000);
+  // Los céntimos se redondean una vez, sin arrastrar decimales.
+  assert.equal(conIva(1733, 21), 2097);
+});
+
+test('el gasto diario cuenta con IVA y el prorrateo también', () => {
+  const { rangeAccrual, rangeOccurrences } = require('../src/expenses');
+
+  const publi = { id: 0, kind: 'daily', anchor_date: '2026-08-01', amount_cents: 2000, vat_percent: 21 };
+  // 20 € al día son 24,20 € contados.
+  assert.equal(rangeAccrual(publi, '2026-08-02', '2026-08-02').cents, 2420);
+  assert.equal(rangeAccrual(publi, '2026-08-01', '2026-08-31').cents, 2420 * 31);
+
+  // El calendario sigue viendo el importe sin IVA, que es el que se escribe.
+  const [dia] = rangeOccurrences(publi, '2026-08-02', '2026-08-02');
+  assert.equal(dia.amount_cents, 2000);
+  assert.equal(dia.con_iva_cents, 2420);
+
+  // Y un mensual prorrateado también reparte el importe con IVA.
+  const alquiler = { id: 0, kind: 'monthly', anchor_date: '2026-08-01', amount_cents: 50000, vat_percent: 21 };
+  assert.equal(rangeAccrual(alquiler, '2026-08-01', '2026-08-31').cents, 60500);
+  assert.equal(rangeAccrual(alquiler, '2026-08-02', '2026-08-02').cents, Math.round(60500 / 31));
+});
+
+test('un día ajustado a mano también lleva su IVA', () => {
+  const { createExpense, setDayAmount, rangeExpenses } = require('../src/expenses');
+  const { currentMonth, monthRange, todayISO } = require('../src/util');
+
+  const { from } = monthRange(currentMonth());
+  const hoy = todayISO();
+  const id = createExpense({
+    name: 'Publicidad con IVA',
+    amount_cents: 2000,
+    vat_percent: 21,
+    kind: 'daily',
+    anchor_date: from,
+    notes: '',
+    is_investment: 1,
+  });
+  setDayAmount(id, hoy, 5000); // un día que se gastó 50 € (sin IVA)
+
+  const [fila] = rangeExpenses({ from: hoy, to: hoy, direction: 'out' }).filter((g) => g.id === id);
+  assert.equal(fila.dias[0].amount_cents, 5000);
+  assert.equal(fila.total_cents, 6050); // 50 € + 21 %
+});

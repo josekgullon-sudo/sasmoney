@@ -541,10 +541,15 @@ function readMovementForm(body) {
   const anchor_date = String(body.anchor_date || '').trim();
   if (!isValidDate(anchor_date)) return { error: 'La fecha no es válida.' };
 
+  // El IVA sólo cuenta si se marca que el importe va sin él.
+  const vat = Number(String(body.vat_percent || '').replace(',', '.'));
+  const vat_percent = body.sin_iva && Number.isFinite(vat) ? Math.min(100, Math.max(0, vat)) : 0;
+
   return {
     data: {
       name,
       amount_cents,
+      vat_percent,
       kind,
       anchor_date,
       notes: String(body.notes || '').trim().slice(0, 200),

@@ -114,7 +114,10 @@ CREATE INDEX IF NOT EXISTS idx_entries_settlement ON entries(settlement_id);
 CREATE TABLE IF NOT EXISTS expenses (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   name         TEXT    NOT NULL,
+  -- El importe se guarda tal y como lo escribe el jefe. Si lo escribe sin IVA,
+  -- vat_percent dice cuánto hay que sumarle al contarlo; 0 = ya lo lleva dentro.
   amount_cents INTEGER NOT NULL CHECK (amount_cents >= 0),
+  vat_percent  REAL    NOT NULL DEFAULT 0,
   -- 'once' = un pago suelto; el resto se repiten solos.
   kind         TEXT    NOT NULL CHECK (kind IN ('daily','once','monthly','quarterly','yearly')),
   -- Fecha del pago suelto, o fecha del primero si se repite.
@@ -164,6 +167,14 @@ function migrate() {
     db.exec('ALTER TABLE expenses ADD COLUMN is_investment INTEGER NOT NULL DEFAULT 0');
   }
 
+  if (!cols.includes('vat_percent')) {
+    db.exec('ALTER TABLE expenses ADD COLUMN vat_percent REAL NOT NULL DEFAULT 0');
+    // Los gastos de marketing se apuntan sin IVA: es lo que enseñan las
+    // plataformas de publicidad. Arrancan con el 21 % puesto; el resto se
+    // quedan a 0 y se marcan uno a uno si hace falta.
+    db.exec('UPDATE expenses SET vat_percent = 21 WHERE is_investment = 1');
+  }
+
   const entryCols = db.prepare('PRAGMA table_info(entries)').all().map((c) => c.name);
   if (!entryCols.includes('service_time')) {
     db.exec("ALTER TABLE entries ADD COLUMN service_time TEXT NOT NULL DEFAULT ''");
@@ -208,11 +219,12 @@ function migrate() {
         notes        TEXT    NOT NULL DEFAULT '',
         created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
         direction    TEXT    NOT NULL DEFAULT 'out',
-        is_investment INTEGER NOT NULL DEFAULT 0
+        is_investment INTEGER NOT NULL DEFAULT 0,
+        vat_percent  REAL    NOT NULL DEFAULT 0
       );
       INSERT INTO expenses_nueva
-        (id, name, amount_cents, kind, anchor_date, active, notes, created_at, direction, is_investment)
-        SELECT id, name, amount_cents, kind, anchor_date, active, notes, created_at, direction, is_investment
+        (id, name, amount_cents, kind, anchor_date, active, notes, created_at, direction, is_investment, vat_percent)
+        SELECT id, name, amount_cents, kind, anchor_date, active, notes, created_at, direction, is_investment, vat_percent
           FROM expenses;
       DROP TABLE expenses;
       ALTER TABLE expenses_nueva RENAME TO expenses;

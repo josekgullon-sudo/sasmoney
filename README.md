@@ -249,10 +249,17 @@ docker run -p 4400:4400 -v sasmoney-data:/data \
 - **Un gasto diario cuenta tantas veces como días tenga el mes**: 20 €/día son 620 € en un
   mes de 31 días y 560 € en febrero. Si empieza a mitad de mes, sólo cuentan los días desde
   esa fecha.
+- **Los importes se pueden apuntar sin IVA.** En cada gasto hay una casilla *El importe es sin
+  IVA* con su porcentaje (21 % por defecto). El importe se guarda tal y como lo escribes —para
+  poder seguir copiando la cifra que da la plataforma de anuncios— y el IVA se le suma al
+  contarlo: 20 € al día con el 21 % cuentan como **24,20 €**, y el mes son 750,20 € en vez de
+  620 €. En Caja se ve el desglose (*20,00 € + 21% IVA = 24,20 €*). Si el importe ya lleva el
+  IVA dentro, se deja sin marcar.
 - **El calendario del mes** (botón *Día a día* en Caja) es para cuando ese gasto no es igual
   todos los días, que es lo normal con la publicidad. Sale el mes entero como un calendario de
   pared, con una casilla por día y un solo botón de guardar:
-  - Lo que **escribes** se queda marcado en verde y es lo que cuenta ese día.
+  - Lo que **escribes** se queda marcado en verde y es lo que cuenta ese día (sin IVA, si el
+    gasto está marcado como tal: arriba se ve el total con IVA).
   - Lo que **dejas en blanco** va al importe de siempre, que aparece en gris de fondo.
   - **Borrar** una casilla devuelve ese día a lo normal.
 

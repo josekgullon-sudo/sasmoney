@@ -32,6 +32,21 @@ const KIND_LABELS = {
 
 const KIND_STEP = { monthly: 1, quarterly: 3, yearly: 12 };
 
+/**
+ * El importe con su IVA.
+ *
+ * La publicidad se apunta sin IVA, que es como la enseñan las plataformas, pero
+ * lo que sale de la cuenta lo lleva. Se guarda el importe tal y como se escribe
+ * y el IVA se suma al contar: así el jefe sigue apuntando la cifra que ve en su
+ * panel de anuncios y las cuentas salen con lo que de verdad se paga.
+ *
+ * Con vat_percent a 0 no toca nada: el importe ya lo lleva dentro.
+ */
+function conIva(cents, vatPercent) {
+  const iva = Math.max(0, Number(vatPercent) || 0);
+  return iva === 0 ? cents : Math.round((cents * (100 + iva)) / 100);
+}
+
 /** Suma meses a una fecha, ajustando el día si el mes destino es más corto. */
 function addMonths(iso, months) {
   const [y, m, d] = iso.split('-').map(Number);
@@ -100,11 +115,17 @@ function rangeOccurrences(expense, from, to) {
   if (anchor > to) return [];
 
   const ajustes = dayOverrides(expense.id, from, to);
-  const conImporte = (fecha) => ({
-    fecha,
-    amount_cents: ajustes.has(fecha) ? ajustes.get(fecha) : expense.amount_cents,
-    ajustado: ajustes.has(fecha),
-  });
+  const conImporte = (fecha) => {
+    // `amount_cents` es lo que escribió el jefe (el calendario lo enseña tal
+    // cual); `con_iva_cents` es lo que cuesta de verdad y es lo que se suma.
+    const neto = ajustes.has(fecha) ? ajustes.get(fecha) : expense.amount_cents;
+    return {
+      fecha,
+      amount_cents: neto,
+      con_iva_cents: conIva(neto, expense.vat_percent),
+      ajustado: ajustes.has(fecha),
+    };
+  };
 
   if (expense.kind === 'once') {
     return anchor >= from && anchor <= to ? [conImporte(anchor)] : [];
@@ -197,7 +218,7 @@ function rangeAccrual(expense, from, to) {
   if (expense.kind === 'daily' || expense.kind === 'once') {
     const dias = rangeOccurrences(expense, from, to);
     return {
-      cents: dias.reduce((a, d) => a + d.amount_cents, 0),
+      cents: dias.reduce((a, d) => a + d.con_iva_cents, 0),
       prorrateado: false,
       dias: dias.length,
       span: null,
@@ -207,6 +228,7 @@ function rangeAccrual(expense, from, to) {
   const step = KIND_STEP[expense.kind];
   if (!step) return vacio;
 
+  const importe = conIva(expense.amount_cents, expense.vat_percent);
   let cents = 0;
   let dias = 0;
   let tramos = 0;
@@ -222,8 +244,7 @@ function rangeAccrual(expense, from, to) {
     const dentro = daysBetween(desde, hasta);
 
     if (dentro > 0) {
-      cents +=
-        dentro >= largo ? expense.amount_cents : Math.round((expense.amount_cents * dentro) / largo);
+      cents += dentro >= largo ? importe : Math.round((importe * dentro) / largo);
       dias += dentro;
       tramos += 1;
       span = largo;
@@ -295,20 +316,20 @@ function getExpense(id) {
 function createExpense(data) {
   const info = db
     .prepare(
-      `INSERT INTO expenses (name, amount_cents, kind, anchor_date, notes, direction, is_investment)
-       VALUES (@name, @amount_cents, @kind, @anchor_date, @notes, @direction, @is_investment)`
+      `INSERT INTO expenses (name, amount_cents, vat_percent, kind, anchor_date, notes, direction, is_investment)
+       VALUES (@name, @amount_cents, @vat_percent, @kind, @anchor_date, @notes, @direction, @is_investment)`
     )
-    .run({ direction: 'out', is_investment: 0, ...data });
+    .run({ direction: 'out', is_investment: 0, vat_percent: 0, ...data });
   return Number(info.lastInsertRowid);
 }
 
 function updateExpense(id, data) {
   db.prepare(
-    `UPDATE expenses SET name = @name, amount_cents = @amount_cents, kind = @kind,
-            anchor_date = @anchor_date, notes = @notes, active = @active,
+    `UPDATE expenses SET name = @name, amount_cents = @amount_cents, vat_percent = @vat_percent,
+            kind = @kind, anchor_date = @anchor_date, notes = @notes, active = @active,
             is_investment = @is_investment
       WHERE id = @id`
-  ).run({ is_investment: 0, ...data, id });
+  ).run({ is_investment: 0, vat_percent: 0, ...data, id });
 }
 
 function deleteExpense(id) {
@@ -425,7 +446,9 @@ function upcoming({ dias = 90, limit = 20, direction = 'out' } = {}) {
   for (const e of listExpenses({ direction })) {
     if (!e.active) continue;
     const fecha = nextDate(e, hoy);
-    if (fecha && fecha <= limite) rows.push({ ...e, fecha });
+    if (fecha && fecha <= limite) {
+      rows.push({ ...e, fecha, con_iva_cents: conIva(e.amount_cents, e.vat_percent) });
+    }
   }
   rows.sort((a, b) => a.fecha.localeCompare(b.fecha));
   return rows.slice(0, limit);
@@ -437,6 +460,7 @@ module.exports = {
   KIND_LABELS,
   addMonths,
   addDays,
+  conIva,
   nextDate,
   dateInMonth,
   monthOccurrences,

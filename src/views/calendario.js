@@ -1,6 +1,8 @@
 'use strict';
 
 const { esc, formatDate, monthLabel, recentMonths, previousMonth, nextMonth } = require('../util');
+const { conIva: sumaIva } = require('../expenses');
+const { fmtPercent } = require('../commission');
 const { layout } = require('./layout');
 const { stats, money, emptyState } = require('./common');
 
@@ -18,9 +20,12 @@ const { stats, money, emptyState } = require('./common');
  * a lo normal.
  */
 function adminCalendario({ user, flash, warning, gasto, month, dias, hoy, volverA }) {
-  const totalCents = dias.reduce((a, d) => a + d.amount_cents, 0);
+  // Se escribe el importe sin IVA (el que da la plataforma) y se cuenta con él.
+  const netoCents = dias.reduce((a, d) => a + d.amount_cents, 0);
+  const totalCents = dias.reduce((a, d) => a + d.con_iva_cents, 0);
   const ajustados = dias.filter((d) => d.ajustado).length;
   const normal = money(gasto.amount_cents);
+  const conIva = gasto.vat_percent > 0;
 
   // Los días se ponen bajo su día de la semana, como un calendario de pared.
   const huecos = dias.length ? diaSemana(dias[0].fecha) : 0;
@@ -28,7 +33,12 @@ function adminCalendario({ user, flash, warning, gasto, month, dias, hoy, volver
   const body = `
 <h1>${esc(gasto.name)} · día a día</h1>
 <p class="sub">Escribe lo que se gastó de verdad cada día. Lo que dejes en blanco cuenta como
-   el importe de siempre (${esc(normal)}).</p>
+   el importe de siempre (${esc(normal)}).${
+     conIva
+       ? ` Los importes van <strong>sin IVA</strong>, como los da la plataforma: se le suma
+          el ${esc(fmtPercent(gasto.vat_percent))} al contarlos.`
+       : ''
+   }</p>
 
 <form method="get" action="/admin/caja/${gasto.id}/calendario" class="card" style="padding:12px 14px">
   <div class="row">
@@ -50,8 +60,17 @@ function adminCalendario({ user, flash, warning, gasto, month, dias, hoy, volver
 </form>
 
 ${stats([
-  { k: monthLabel(month), v: money(totalCents), sub: `${dias.length} día(s)`, accent: true },
-  { k: 'Importe de siempre', v: normal, sub: 'para los días en blanco' },
+  {
+    k: monthLabel(month),
+    v: money(totalCents),
+    sub: conIva ? `${money(netoCents)} + ${fmtPercent(gasto.vat_percent)} IVA` : `${dias.length} día(s)`,
+    accent: true,
+  },
+  {
+    k: 'Importe de siempre',
+    v: normal,
+    sub: conIva ? `sin IVA · ${money(conIvaCents(gasto))} con él` : 'para los días en blanco',
+  },
   { k: 'Días escritos a mano', v: String(ajustados), sub: `de ${dias.length}` },
 ])}
 
@@ -88,8 +107,9 @@ ${
     <button class="btn big" type="submit">Guardar el mes</button>
     <a class="btn ghost" href="${esc(volverA)}">Volver a Caja</a>
   </div>
-  <p class="hint">Total del mes ahora mismo: <strong>${money(totalCents)}</strong>.
-     Borra una casilla para que ese día vuelva a ${esc(normal)}.</p>
+  <p class="hint">Total del mes ahora mismo: <strong>${money(totalCents)}</strong>${
+    conIva ? ` (${money(netoCents)} sin IVA)` : ''
+  }. Borra una casilla para que ese día vuelva a ${esc(normal)}.</p>
 </form>
 
 <div class="card">
@@ -110,6 +130,8 @@ ${
 
   return layout({ title: `${gasto.name} día a día`, user, body, active: 'caja', flash, warning });
 }
+
+const conIvaCents = (gasto) => sumaIva(gasto.amount_cents, gasto.vat_percent);
 
 const SEMANA = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
 

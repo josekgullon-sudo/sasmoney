@@ -2,7 +2,8 @@
 
 const { esc, formatDate, formatDateShort } = require('../util');
 const { periodQuery, rangeLabel, periodExplained } = require('../period');
-const { KINDS, KIND_LABELS } = require('../expenses');
+const { KINDS, KIND_LABELS, conIva } = require('../expenses');
+const { fmtPercent } = require('../commission');
 const { layout } = require('./layout');
 const { stats, money, emptyState, periodPicker } = require('./common');
 
@@ -10,6 +11,29 @@ const { stats, money, emptyState, periodPicker } = require('./common');
 function primeraMayuscula(texto) {
   const s = String(texto || '');
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * La casilla del IVA. El importe se guarda como se escribe y el IVA se suma al
+ * contar, así que se puede seguir apuntando la cifra que da la plataforma de
+ * anuncios sin tener que hacer la cuenta a mano.
+ */
+function camposIva({ marcado, percent, id }) {
+  return `<div class="field">
+    <label style="display:flex;align-items:center;gap:9px;font-weight:500;color:var(--ink)">
+      <input type="checkbox" name="sin_iva" value="1" ${marcado ? 'checked' : ''} style="width:auto">
+      El importe es <strong>sin IVA</strong>
+    </label>
+    <div class="row" style="margin-top:8px">
+      <div class="field" style="max-width:160px;margin:0">
+        <label for="iva_${id}">IVA a añadir (%)</label>
+        <input id="iva_${id}" name="vat_percent" inputmode="decimal"
+               value="${esc(String(percent).replace('.', ','))}">
+      </div>
+    </div>
+    <div class="hint">Márcalo y se le suma el IVA al contarlo: 20 € al día con el 21 % cuentan
+       como 24,20 €. Si el importe ya lo lleva dentro, déjalo sin marcar.</div>
+  </div>`;
 }
 
 /** El periodo escondido dentro de otro formulario, para no perderlo al enviar. */
@@ -108,7 +132,9 @@ ${tarjetaReparto(workers, totales.inversionCents, reparto, periodo, otrosGastos,
           }</td>
         <td>${esc(g.name)}${g.is_investment ? ' <span class="pill">Inversión</span>' : ''}
             <div class="small muted">${esc(KIND_LABELS[g.kind])}</div></td>
-        <td class="num">${g.signo}${money(g.amount_cents)}</td>
+        <td class="num">${g.signo}${money(g.con_iva_cents ?? g.amount_cents)}${
+          g.vat_percent > 0 ? '<div class="small muted">IVA incluido</div>' : ''
+        }</td>
       </tr>`
         )
         .join('')}
@@ -152,6 +178,7 @@ function formularioAlta(direction, hoy) {
         <input id="d_${direction}" name="anchor_date" type="date" required value="${esc(hoy)}">
       </div>
     </div>
+    ${esIngreso ? '' : camposIva({ marcado: false, percent: 21, id: direction })}
     ${
       esIngreso
         ? ''
@@ -201,6 +228,11 @@ function formularioEdicion(e, esIngreso, diasAjustados, periodo, hoy) {
       <label for="e_notes">Nota</label>
       <input id="e_notes" name="notes" value="${esc(e.notes)}" placeholder="Opcional">
     </div>
+    ${
+      esIngreso
+        ? ''
+        : camposIva({ marcado: e.vat_percent > 0, percent: e.vat_percent > 0 ? e.vat_percent : 21, id: 'e' })
+    }
     ${
       esIngreso
         ? ''
@@ -258,11 +290,17 @@ function listaMovimientos(filas, direction) {
           ${g.is_investment ? '<span class="pill">Inversión</span>' : ''}
           <div class="small muted only-narrow">${money(g.amount_cents)}${
             g.kind === 'daily' ? ' al día' : ` · ${esc(KIND_LABELS[g.kind])}`
-          }</div>
+          }${g.vat_percent > 0 ? ` + ${esc(fmtPercent(g.vat_percent))} IVA` : ''}</div>
           ${g.notes ? `<div class="small muted">${esc(g.notes)}</div>` : ''}</td>
       <td class="small muted hide-narrow">${esc(KIND_LABELS[g.kind])}</td>
       <td class="num hide-narrow">${money(g.amount_cents)}${
           g.kind === 'daily' ? '<div class="small muted">al día</div>' : ''
+        }${
+          g.vat_percent > 0
+            ? `<div class="small muted">+ ${esc(fmtPercent(g.vat_percent))} IVA = ${money(
+                conIva(g.amount_cents, g.vat_percent)
+              )}</div>`
+            : ''
         }</td>
       <td class="num">${
         g.esteMes
