@@ -50,7 +50,7 @@ router.get('/', requireLogin, (req, res) => {
 
   const todayEntries = repo.listEntries({ userId: req.user.id, from: today, to: today });
   const monthTotals = repo.totalsFor({ userId: req.user.id, from, to });
-  const calc = repo.commissionForTotals(req.user, monthTotals);
+  const calc = repo.commissionFor({ userId: req.user.id, from, to });
 
   res.send(
     views.workerHome({
@@ -146,14 +146,13 @@ router.get('/mis-cuentas', requireLogin, (req, res) => {
   const totalCents = entries.reduce((a, e) => a + e.amount_cents, 0);
   const calc = repo.commissionForEntries(req.user, entries);
 
-  const pending = repo.totalsFor({ userId: req.user.id, from, to, pendingOnly: true });
-  const pendingCalc = repo.commissionForTotals(req.user, pending);
+  const pendingCalc = repo.commissionFor({ userId: req.user.id, from, to, pendingOnly: true });
 
   // Los últimos seis meses, para poder compararse consigo misma.
   const historial = recentMonths(6).map((m) => {
     const r = monthRange(m);
     const t = repo.totalsFor({ userId: req.user.id, from: r.from, to: r.to });
-    const c = repo.commissionForTotals(req.user, t);
+    const c = repo.commissionFor({ userId: req.user.id, from: r.from, to: r.to });
     return { month: m, count: t.count, totalCents: t.totalCents, commissionCents: c.commissionCents };
   });
 

@@ -68,6 +68,27 @@
     });
   }
 
+  // La escalera del umbral: añadir y quitar tramos, igual que los de comisión.
+  var umbralTramos = document.getElementById('umbral-tramos');
+  if (umbralTramos) {
+    var addUmbral = document.getElementById('add-umbral-tramo');
+    if (addUmbral) {
+      addUmbral.addEventListener('click', function () {
+        var row = document.createElement('div');
+        row.className = 'tier-row';
+        row.innerHTML =
+          '<div><label>Desde (€ por encima de gastos)</label><input type="text" name="tramo_desde" inputmode="decimal" placeholder="200"></div>' +
+          '<div><label>Puntos de más</label><input type="text" name="tramo_puntos" inputmode="decimal" placeholder="5"></div>' +
+          '<button type="button" class="btn ghost small" data-remove-tier>Quitar</button>';
+        umbralTramos.appendChild(row);
+      });
+    }
+    umbralTramos.addEventListener('click', function (ev) {
+      var btn = ev.target.closest('[data-remove-tier]');
+      if (btn) btn.closest('.tier-row').remove();
+    });
+  }
+
   // Muestra u oculta los campos según el tipo de comisión elegido.
   var typeSelect = document.querySelector('[data-commission-type]');
   if (typeSelect) {

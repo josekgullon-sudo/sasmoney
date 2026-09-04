@@ -431,6 +431,24 @@ function settlementCard(r, { from, to, onlyPending, limites }) {
       : ''
   }
 
+  ${
+    r.calc.umbral
+      ? `<div class="table-wrap"><table><tbody>
+      <tr><td>Ha facturado</td><td class="num">${money(r.calc.umbral.facturadoCents)}</td></tr>
+      <tr><td>− Su parte de los gastos de esos días</td>
+          <td class="num">−${money(r.calc.umbral.gastosCents)}</td></tr>
+      <tr><td><strong>Comisiona sobre</strong></td>
+          <td class="num"><strong>${money(r.calc.umbral.excesoCents)}</strong></td></tr>
+    </tbody></table></div>
+    ${
+      r.calc.umbral.diasSinCubrir > 0
+        ? `<p class="small muted">${r.calc.umbral.diasSinCubrir} día(s) no llegaron a cubrir gastos:
+           esos no comisionan.</p>`
+        : ''
+    }`
+      : ''
+  }
+
   <details class="box">
     <summary>Ver el desglose</summary>
     <div class="table-wrap">
@@ -447,6 +465,32 @@ function settlementCard(r, { from, to, onlyPending, limites }) {
     ${
       r.calc.capped
         ? '<p class="small" style="color:var(--warn)">Ojo: la regla daba más de lo facturado, se ha limitado al total facturado.</p>'
+        : ''
+    }
+    ${
+      r.calc.umbral
+        ? `<h3 style="margin:14px 0 6px;font-size:.95rem">Día a día</h3>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>Día</th><th class="num hide-narrow">Equipo</th><th class="num hide-narrow">Gastos</th>
+          <th class="num">Suyo</th><th class="num">Comisiona</th><th class="num">%</th><th class="num">Se lleva</th>
+        </tr></thead>
+        <tbody>
+          ${r.calc.umbral.dias
+            .map(
+              (d) => `<tr${d.miExcesoCents === 0 ? ' class="muted"' : ''}>
+            <td class="small nowrap">${esc(formatDateShort(d.fecha))}</td>
+            <td class="num small hide-narrow">${money(d.equipoCents)}</td>
+            <td class="num small hide-narrow">${money(d.costeCents)}</td>
+            <td class="num small">${money(d.mioCents)}</td>
+            <td class="num small">${money(d.miExcesoCents)}</td>
+            <td class="num small">${d.miExcesoCents === 0 ? '—' : esc(String(d.percent) + '%')}</td>
+            <td class="num small"><strong>${money(d.comisionCents)}</strong></td>
+          </tr>`
+            )
+            .join('')}
+        </tbody>
+      </table></div>`
         : ''
     }
     <div class="table-wrap">
@@ -490,9 +534,53 @@ Su cuenta de este periodo quedará a cero y esos servicios ya no se podrán modi
 </div>`;
 }
 
-function adminWorkers({ user, flash, warning, workers, retencion }) {
+function adminWorkers({ user, flash, warning, workers, retencion, umbral }) {
   const body = `
 <h1>Trabajadores</h1>
+
+<div class="card">
+  <h2>Comisionar sólo por encima de los gastos</h2>
+  <p class="sub">Hasta que entre todos no cubren lo que cuesta el día, nadie comisiona. A partir
+     de ahí se comisiona sobre lo que pasa de los gastos, y cuanto más se genera, mejor
+     porcentaje.</p>
+  <form method="post" action="/admin/umbral">
+    <div class="field">
+      <label style="display:flex;align-items:center;gap:9px;font-weight:500;color:var(--ink)">
+        <input type="checkbox" name="activo" value="1" ${umbral.activo ? 'checked' : ''} style="width:auto">
+        Comisionar sólo por encima de los gastos del día
+      </label>
+      <div class="hint">Sin marcar, se comisiona sobre todo lo facturado, como antes.</div>
+    </div>
+
+    <label>La escalera</label>
+    <p class="hint" style="margin-top:0">Los puntos se le <strong>suman a su porcentaje</strong>,
+       así cada uno conserva el suyo: con +5, una al 40 % pasa al 45 % y otra al 35 % pasa al 40 %.
+       Se mira lo que ha generado <strong>cada uno por encima de los gastos ese día</strong>, y el
+       tramo alcanzado se aplica a todo lo suyo de ese día.</p>
+    <div id="umbral-tramos">
+      ${umbral.tramos
+        .map(
+          (t) => `<div class="tier-row">
+        <div><label>Desde (€ por encima de gastos)</label>
+          <input type="text" name="tramo_desde" inputmode="decimal" value="${esc(
+            (t.min_cents / 100).toFixed(2).replace('.', ',')
+          )}"></div>
+        <div><label>Puntos de más</label>
+          <input type="text" name="tramo_puntos" inputmode="decimal" value="${esc(t.puntos)}"></div>
+        <button type="button" class="btn ghost small" data-remove-tier>Quitar</button>
+      </div>`
+        )
+        .join('')}
+    </div>
+    <button type="button" class="btn ghost small" id="add-umbral-tramo">+ Añadir tramo</button>
+    <div class="hint" style="margin-top:8px">Ejemplo: desde 0 € → +0 puntos (su % de siempre),
+       desde 200 € → +5, desde 500 € → +10.</div>
+
+    <div class="actions" style="margin-top:14px">
+      <button class="btn" type="submit">Guardar</button>
+    </div>
+  </form>
+</div>
 
 <div class="card">
   <h2>Retención sobre lo que cobran</h2>

@@ -99,7 +99,7 @@ traer su propio cortafuegos aparte.
 ### ¿HTTPS sin comprar dominio?
 
 Se puede, y es casi el mismo trabajo: servicios como `nip.io` convierten tu IP en un
-nombre gratis. Si tu IP es 187.124.208.99, el nombre `sasmoney.187.124.208.99.nip.io`
+nombre gratis. Si tu IP es 163.172.109.52, el nombre `sasmoney.163.172.109.52.nip.io`
 ya apunta a ella sin que tengas que registrar ni configurar nada, y Let's Encrypt
 emite certificado para él. Sigue el apartado siguiente usando ese nombre en lugar de
 un dominio propio.

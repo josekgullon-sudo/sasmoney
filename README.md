@@ -43,7 +43,8 @@ Cinco pantallas, cada una con una pregunta clara:
   iguales. Los gastos diarios tienen **un calendario del mes** para apuntar lo que se gastó
   de verdad cada día.
 - **Servicios** — todos los cobros, con filtros y descarga en CSV.
-- **Trabajadores** — altas, contraseñas, cuánto se lleva cada una y la retención.
+- **Trabajadores** — altas, contraseñas, cuánto se lleva cada una, la retención y el umbral de
+  gastos.
 
 ### El periodo: no sólo por meses
 
@@ -112,6 +113,42 @@ estabas mirando.
 Cada trozo se calcula con la regla completa del trabajador, no repartiendo un total: con
 tramos, la comisión no es proporcional a cada servicio, así que la única manera de saber lo que
 se paga por un grupo es calcularlo sobre ese grupo.
+
+## Comisionar sólo por encima de los gastos
+
+Se puede poner que **hasta que entre todos no se cubre lo que cuesta el día, nadie comisiona**.
+A partir de ahí se comisiona sobre lo que pasa de los gastos, y cuanto más se genera, mejor
+porcentaje. Se activa y se configura en **Trabajadores**.
+
+La cuenta va **día a día**:
+
+1. Lo que ha facturado el equipo ese día, menos lo que costó el día: eso es el **exceso**.
+   Si sale negativo, ese día no comisiona nadie.
+2. El exceso se reparte entre los trabajadores **según lo que ha facturado cada uno ese día**.
+   El umbral se cubre entre todos, así que el exceso también se reparte entre todos.
+3. A la parte de cada uno se le aplica **su porcentaje de siempre más los puntos del tramo**
+   que alcance con esa parte.
+
+La escalera es **una sola para todos y va en puntos**, no en porcentajes cerrados: así cada
+trabajadora conserva su base. Con *desde 500 € → +10*, una que va al 40 % pasa al 50 % y otra
+que va al 35 % pasa al 45 %. El tramo alcanzado se aplica a **todo** el exceso de ese día, no
+sólo a la parte que asoma.
+
+Un día con 150 € de gastos, el equipo factura 900 € (Anita 750 €, Milu 150 €) y la escalera es
+*0 € → +0, 200 € → +5, 500 € → +10*:
+
+| | Anita (40 %) | Milu (35 %) |
+|---|---|---|
+| Ha facturado | 750,00 € | 150,00 € |
+| Su parte del exceso (750 € entre los dos) | 625,00 € | 125,00 € |
+| Tramo que alcanza | +10 → **50 %** | +0 → **35 %** |
+| **Se lleva** | **312,50 €** | **43,75 €** |
+
+En la liquidación sale el desglose y una tabla **día a día** con lo que facturó el equipo, lo
+que costó el día, la parte de cada uno y el porcentaje que le tocó, para poder comprobarlo.
+
+Sólo se aplica a quien cobra **un porcentaje**. A los de tramos propios o cantidad fija por
+servicio se les sigue pagando con su regla de siempre.
 
 ## Las tres formas de pagar a una trabajadora
 

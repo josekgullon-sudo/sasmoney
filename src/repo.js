@@ -3,27 +3,66 @@
 const { db, transaction } = require('./db');
 const { calcCommission } = require('./commission');
 const retention = require('./retention');
+const threshold = require('./threshold');
+const expenses = require('./expenses');
+
+/**
+ * Lo que ha facturado **todo el equipo** cada día del periodo.
+ *
+ * Hace falta para el umbral: los gastos del día se cubren entre todos, así que
+ * cuenta lo que facturó cualquiera ese día, esté liquidado o no. Lo que pase
+ * después con esos servicios no cambia lo que costó el día.
+ */
+function teamBillingByDay(from, to) {
+  const filas = db
+    .prepare(
+      `SELECT service_date AS fecha, COALESCE(SUM(amount_cents), 0) AS total
+         FROM entries WHERE service_date >= ? AND service_date <= ?
+        GROUP BY service_date`
+    )
+    .all(from, to);
+  return new Map(filas.map((f) => [f.fecha, f.total]));
+}
 
 /**
  * Lo que hay que pagarle a un trabajador por unos servicios, ya con la
  * retención aplicada. Todo el mundo pasa por aquí para que no se le olvide a
  * nadie: si se calculara la comisión a pelo, se pagaría de más.
+ *
+ * Si está puesto que sólo se comisiona por encima de los gastos del día, la
+ * cuenta la lleva threshold.js, que necesita saber qué facturó el equipo y qué
+ * costó cada uno de esos días.
  */
 function commissionForEntries(worker, entries) {
+  const retencion = retention.forEntries(worker, entries);
+  const umbral = threshold.getThreshold();
+
+  if (umbral.activo && entries.length > 0 && worker.commission_type === 'percent') {
+    const fechas = entries.map((e) => e.service_date).sort();
+    const desde = fechas[0];
+    const hasta = fechas[fechas.length - 1];
+    return threshold.calcConUmbral(worker, entries, {
+      tramos: umbral.tramos,
+      equipoPorDia: teamBillingByDay(desde, hasta),
+      costePorDia: expenses.costByDay(desde, hasta),
+      retencion,
+    });
+  }
+
   return calcCommission(worker, {
     totalCents: entries.reduce((a, e) => a + e.amount_cents, 0),
     serviceCount: entries.length,
-    retencion: retention.forEntries(worker, entries),
+    retencion,
   });
 }
 
-/** Igual, pero partiendo de los totales de totalsFor en lugar de la lista. */
-function commissionForTotals(worker, totals) {
-  return calcCommission(worker, {
-    totalCents: totals.totalCents,
-    serviceCount: totals.count,
-    retencion: retention.forTotals(worker, totals),
-  });
+/**
+ * Lo mismo, buscando los servicios por su cuenta. Con el umbral puesto hace
+ * falta la lista día a día, así que los totales sueltos ya no bastan.
+ */
+function commissionFor({ userId, from, to, pendingOnly = false }) {
+  const worker = getUser(userId);
+  return commissionForEntries(worker, listEntries({ userId, from, to, pendingOnly }));
 }
 
 /**
@@ -373,7 +412,8 @@ function listSettlements({ userId = null, limit = 50 } = {}) {
 
 module.exports = {
   commissionForEntries,
-  commissionForTotals,
+  commissionFor,
+  teamBillingByDay,
   listEntries,
   getEntry,
   createEntry,

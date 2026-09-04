@@ -5,7 +5,6 @@ const {
   addDays,
   monthRange,
   monthLabel,
-  currentMonth,
   previousMonth,
   daysBetween,
   formatDate,
@@ -51,9 +50,13 @@ const ATAJO_LABELS = {
 /** El orden en el que salen los botones rápidos. */
 const ATAJOS_RAPIDOS = ['hoy', 'ayer', '7dias', '30dias', 'mes', 'mes_pasado'];
 
-function validMonth(value) {
+/**
+ * Un mes con formato correcto. Si no lo tiene, se cae al mes de `hoy`, que en
+ * las pruebas no es el de verdad: por eso se pasa y no se pregunta al reloj.
+ */
+function validMonth(value, hoy = todayISO()) {
   const m = String(value || '');
-  return /^\d{4}-(0[1-9]|1[0-2])$/.test(m) ? m : currentMonth();
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(m) ? m : hoy.slice(0, 7);
 }
 
 /** Si el periodo cuadra justo con un mes entero, devuelve ese mes. */
@@ -80,7 +83,7 @@ function resolvePeriod(query = {}, hoy = todayISO()) {
     return completar({ from, to }, hoy);
   }
 
-  const month = validMonth(query.month);
+  const month = validMonth(query.month, hoy);
   return completar({ ...monthRange(month), month }, hoy);
 }
 

@@ -388,6 +388,38 @@ function rangeExpenses({ from, to, direction = 'out' }) {
   return rows;
 }
 
+/**
+ * Lo que cuesta cada día del periodo, día por día.
+ *
+ * Hace falta para saber cuánto tienen que facturar los trabajadores antes de
+ * empezar a comisionar. Los diarios y los pagos sueltos caen en su día; los que
+ * se repiten reparten su parte, que es la misma cuenta que hace rangeAccrual.
+ *
+ * Sumar los días puede quedarse a un par de céntimos del total del mes por el
+ * redondeo de cada día. Para un umbral da igual, y a cambio cada día se explica
+ * solo.
+ */
+function costByDay(from, to, direction = 'out') {
+  const porDia = new Map();
+  const suma = (fecha, cents) => {
+    if (cents) porDia.set(fecha, (porDia.get(fecha) || 0) + cents);
+  };
+
+  for (const e of listExpenses({ direction })) {
+    if (!e.active) continue;
+
+    if (e.kind === 'daily' || e.kind === 'once') {
+      // Una sola consulta por gasto en lugar de una por día.
+      for (const d of rangeOccurrences(e, from, to)) suma(d.fecha, d.con_iva_cents);
+      continue;
+    }
+    for (let dia = from; dia <= to; dia = addDays(dia, 1)) {
+      suma(dia, rangeAccrual(e, dia, dia).cents);
+    }
+  }
+  return porDia;
+}
+
 /** El mes resumido. Atajo del resumen por fechas de abajo. */
 function monthSummary(month, direction = 'out') {
   const { from, to } = monthRange(month);
@@ -480,6 +512,7 @@ module.exports = {
   monthSummary,
   rangeExpenses,
   rangeSummary,
+  costByDay,
   monthExpensesTotal,
   monthInvestmentTotal,
   upcoming,

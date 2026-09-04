@@ -10,6 +10,7 @@ const { resolvePeriod, periodQuery, readVista, validMonth } = require('../period
 const expenses = require('../expenses');
 const investment = require('../investment');
 const retention = require('../retention');
+const threshold = require('../threshold');
 const cajaViews = require('../views/caja');
 const calendarioViews = require('../views/calendario');
 const views = require('../views/admin');
@@ -32,8 +33,7 @@ router.get('/', (req, res) => {
     .settlementRows({ from, to, pendingOnly: false, includeEmpty: true })
     .filter((r) => r.user.active || r.count > 0)
     .map((r) => {
-    const pending = repo.totalsFor({ userId: r.user.id, from, to, pendingOnly: true });
-    const pendingCalc = repo.commissionForTotals(r.user, pending);
+    const pendingCalc = repo.commissionFor({ userId: r.user.id, from, to, pendingOnly: true });
     return { ...r, pendingCommissionCents: pendingCalc.commissionCents };
   });
 
@@ -233,8 +233,35 @@ router.get('/trabajadores', (req, res) => {
       warning: res.locals.warning,
       workers: repo.listWorkers({ includeInactive: true }),
       retencion: retention.getRetention(),
+      umbral: threshold.getThreshold(),
     })
   );
+});
+
+/** Comisionar sólo por encima de los gastos del día, y con qué escalera. */
+router.post('/umbral', (req, res) => {
+  const desde = [].concat(req.body.tramo_desde || []);
+  const puntos = [].concat(req.body.tramo_puntos || []);
+
+  const tramos = [];
+  for (let i = 0; i < Math.max(desde.length, puntos.length); i++) {
+    const min_cents = parseAmountToCents(desde[i]);
+    const p = Number(String(puntos[i] ?? '').replace(',', '.'));
+    if (min_cents === null || !Number.isFinite(p)) continue;
+    tramos.push({ min_cents, puntos: Math.max(0, p) });
+  }
+
+  const activo = Boolean(req.body.activo);
+  threshold.setThreshold({ activo, tramos });
+
+  const puesto = threshold.getThreshold();
+  res.flash(
+    'ok',
+    activo
+      ? `Guardado: se comisiona por encima de los gastos del día, con ${puesto.tramos.length} tramo(s).`
+      : 'Guardado: se vuelve a comisionar sobre todo lo facturado, sin umbral.'
+  );
+  res.redirect('/admin/trabajadores');
 });
 
 /** La retención que se le quita a lo que cobran, y desde cuándo. */

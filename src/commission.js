@@ -221,6 +221,8 @@ function parseAmountToCents(input) {
 module.exports = {
   COMMISSION_TYPES,
   calcCommission,
+  calcRetention,
+  retentionLabel,
   ruleLabel,
   parseTiers,
   formatEuro,
