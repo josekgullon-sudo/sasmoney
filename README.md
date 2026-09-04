@@ -159,7 +159,7 @@ Cada trabajadora tiene su propia regla y la cambias cuando quieras:
 | **Un porcentaje** | Se lleva ese % de todo lo que factura | 40 % → factura 1.000 €, cobra 400 € |
 | **Varios porcentajes por tramos** | El % sube según lo que facture | 0 € → 30 %, 2.000 € → 35 %, 4.000 € → 40 % |
 | **Cantidad fija por servicio** | Cobra lo mismo por cada cliente | 15 € por cliente → 20 clientes, 300 € |
-| **Repartir las ganancias** | Se reparte lo que queda **después de gastos** | La empresa el 40 %, ella el 60 % |
+| **Repartir las ganancias** | Se reparte lo que queda **después de gastos** | La empresa el 60 %, ella el 40 % |
 
 En los tramos puedes elegir cómo se aplican:
 
@@ -184,8 +184,8 @@ Un día con 150 € de gastos en el que el equipo factura 250 €, y ella trajo 
 | Ha facturado | 100,00 € |
 | Su parte de los gastos del día (100 € de 250 €) | −60,00 € |
 | **Ganancias que se reparten** | **40,00 €** |
-| La empresa se queda el 40 % | −16,00 € |
-| **Se lleva (antes de retención)** | **24,00 €** |
+| La empresa se queda el 60 % | −24,00 € |
+| **Se lleva (antes de retención)** | **16,00 €** |
 
 Los días que no llegan a cubrir gastos no dejan ganancia, pero **tampoco restan** de los demás
 días: cada día va por su cuenta, igual que en el umbral. La escalera de tramos no se le aplica,

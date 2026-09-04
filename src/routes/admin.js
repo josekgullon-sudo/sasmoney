@@ -309,7 +309,7 @@ function readCommission(body) {
   const fixed_cents = parseAmountToCents(body.fixed_amount) || 0;
   const profit_company_percent = Math.min(
     100,
-    Math.max(0, Number(String(body.profit_company_percent ?? '40').replace(',', '.')) || 0)
+    Math.max(0, Number(String(body.profit_company_percent ?? '60').replace(',', '.')) || 0)
   );
 
   const froms = [].concat(body.tier_from || []);

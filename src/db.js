@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS users (
   tiers_json       TEXT    NOT NULL DEFAULT '[]',    -- para 'tiers'
   tier_mode        TEXT    NOT NULL DEFAULT 'total' CHECK (tier_mode IN ('total','progressive')),
   -- para 'profit': lo que se lleva LA EMPRESA de las ganancias; el resto es suyo.
-  profit_company_percent REAL NOT NULL DEFAULT 40,
+  profit_company_percent REAL NOT NULL DEFAULT 60,
 
   created_at       TEXT    NOT NULL DEFAULT (datetime('now'))
 );
@@ -208,7 +208,7 @@ function migrate() {
   if (!userCols.includes('profit_company_percent')) {
     // Para el trato de repartir ganancias: lo que se lleva la empresa. A quien
     // ya estaba dado de alta no le cambia nada, porque su regla es otra.
-    db.exec('ALTER TABLE users ADD COLUMN profit_company_percent REAL NOT NULL DEFAULT 40');
+    db.exec('ALTER TABLE users ADD COLUMN profit_company_percent REAL NOT NULL DEFAULT 60');
   }
 
   // El CHECK de 'kind' no admitía los gastos diarios y SQLite no deja cambiar un

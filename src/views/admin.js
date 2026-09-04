@@ -649,7 +649,7 @@ function adminWorkerForm({ user, flash, warning, worker }) {
     fixed_cents: 0,
     tiers_json: '[]',
     tier_mode: 'total',
-    profit_company_percent: 40,
+    profit_company_percent: 60,
   };
   const tiers = parseTiers(w.tiers_json);
   const reparto = profitShares(w);
@@ -762,7 +762,8 @@ function adminWorkerForm({ user, flash, warning, worker }) {
       </p>
       <p class="hint">
         Ejemplo: un día el equipo factura 500 € y el día cuesta 150 €. A quien haya traído la
-        mitad le quedan 175 € de ganancia, así que se lleva 105 €.
+        mitad le quedan 175 € de ganancia, así que se lleva
+        <strong data-profit-ejemplo>${money(Math.round((17500 * reparto.trabajador) / 100))}</strong>.
       </p>
       <p class="hint">La escalera de tramos por cubrir gastos no se le aplica: su trato ya va sobre ganancias.</p>
     </div>

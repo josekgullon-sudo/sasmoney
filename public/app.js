@@ -107,12 +107,16 @@
   if (profitInput) {
     var empresaOut = document.querySelector('[data-profit-empresa]');
     var trabajadorOut = document.querySelector('[data-profit-trabajador]');
+    var ejemploOut = document.querySelector('[data-profit-ejemplo]');
     profitInput.addEventListener('input', function () {
       var empresa = Number(String(profitInput.value).replace(',', '.'));
       if (!isFinite(empresa)) return;
       empresa = Math.min(100, Math.max(0, empresa));
+      var suyo = Math.round((100 - empresa) * 100) / 100;
       if (empresaOut) empresaOut.textContent = String(empresa);
-      if (trabajadorOut) trabajadorOut.textContent = String(Math.round((100 - empresa) * 100) / 100);
+      if (trabajadorOut) trabajadorOut.textContent = String(suyo);
+      // El ejemplo de abajo, con los números que se acaban de escribir.
+      if (ejemploOut) ejemploOut.textContent = ((175 * suyo) / 100).toFixed(2).replace('.', ',') + ' €';
     });
   }
 

@@ -170,14 +170,14 @@ test('el trabajador que reparte ganancias cobra sobre lo que queda tras gastos',
   db.exec('DELETE FROM entries; DELETE FROM settlements; DELETE FROM users; DELETE FROM expenses');
 
   // Anita, al 50 % de lo que factura; Bea, que reparte ganancias con la empresa
-  // (40 % para la empresa, 60 % para ella).
+  // (60 % para la empresa, 40 % para ella).
   db.prepare(
     `INSERT INTO users (id, username, name, password_hash, role, commission_type, commission_percent)
      VALUES (1, 'anita', 'Anita', 'x', 'worker', 'percent', 50)`
   ).run();
   db.prepare(
     `INSERT INTO users (id, username, name, password_hash, role, commission_type, profit_company_percent)
-     VALUES (2, 'bea', 'Bea', 'x', 'worker', 'profit', 40)`
+     VALUES (2, 'bea', 'Bea', 'x', 'worker', 'profit', 60)`
   ).run();
 
   // El día cuesta 150 €.
@@ -201,20 +201,20 @@ test('el trabajador que reparte ganancias cobra sobre lo que queda tras gastos',
   const [fila] = repo.settlementRows({ from: DIA, to: DIA, userId: 2 });
 
   // De los 100 € que trajo, le tocan 60 € de los gastos del día (100/250 de 150 €)
-  // y le quedan 40 € de ganancia: se lleva el 60 %, o sea 24 €.
+  // y le quedan 40 € de ganancia: se lleva el 40 %, o sea 16 €.
   assert.equal(fila.calc.umbral.facturadoCents, 10000);
   assert.equal(fila.calc.umbral.gastosCents, 6000);
   assert.equal(fila.calc.umbral.excesoCents, 4000);
-  assert.equal(fila.calc.commissionCents, 2400);
-  assert.equal(fila.calc.companyCents, 7600);
+  assert.equal(fila.calc.commissionCents, 1600);
+  assert.equal(fila.calc.companyCents, 8400);
   assert.match(fila.calc.label, /ganancias/);
 
-  // Y no es el 60 % de lo facturado, que serían 60 €.
-  assert.notEqual(fila.calc.commissionCents, 6000);
+  // Y no es el 40 % de lo facturado, que serían 40 €.
+  assert.notEqual(fila.calc.commissionCents, 4000);
 
   // Al cerrarla se paga eso mismo y sus servicios quedan liquidados.
   const hecho = repo.closeSettlement({ worker: bea, from: DIA, to: DIA });
-  assert.equal(hecho.commissionCents, 2400);
+  assert.equal(hecho.commissionCents, 1600);
   assert.equal(repo.settlementRows({ from: DIA, to: DIA, userId: 2 }).length, 0);
 
   db.exec('DELETE FROM expenses');

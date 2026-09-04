@@ -14,8 +14,8 @@ const { calcCommission, ruleLabel, profitShares } = require('../src/commission')
 const DIA = '2026-09-03';
 const AYER = '2026-09-02';
 
-// El trato nuevo: la empresa se lleva el 40 % de las ganancias, él el 60 %.
-const socio = { commission_type: 'profit', profit_company_percent: 40 };
+// El trato nuevo: la empresa se lleva el 60 % de las ganancias, él el 40 %.
+const socio = { commission_type: 'profit', profit_company_percent: 60 };
 
 const dia = (equipo, coste) => ({
   equipoPorDia: new Map([[DIA, equipo]]),
@@ -25,9 +25,9 @@ const dia = (equipo, coste) => ({
 const servicio = (cents, fecha = DIA) => ({ service_date: fecha, amount_cents: cents });
 
 test('el reparto se lee en las dos direcciones', () => {
-  assert.deepEqual(profitShares(socio), { empresa: 40, trabajador: 60 });
-  assert.match(ruleLabel(socio), /60%/);
-  assert.match(ruleLabel(socio), /40%/);
+  assert.deepEqual(profitShares(socio), { empresa: 60, trabajador: 40 });
+  assert.match(ruleLabel(socio), /40% de las ganancias/);
+  assert.match(ruleLabel(socio), /empresa se lleva 60%/);
 });
 
 test('se reparte lo que queda tras los gastos, no lo facturado', () => {
@@ -37,9 +37,9 @@ test('se reparte lo que queda tras los gastos, no lo facturado', () => {
   assert.equal(calc.umbral.facturadoCents, 25000);
   assert.equal(calc.umbral.gastosCents, 15000);
   assert.equal(calc.umbral.excesoCents, 10000); // la ganancia
-  // El 60 % de los 100 € de ganancia, no de los 250 € facturados.
-  assert.equal(calc.commissionCents, 6000);
-  assert.equal(calc.companyCents, 19000);
+  // El 40 % de los 100 € de ganancia, no de los 250 € facturados.
+  assert.equal(calc.commissionCents, 4000);
+  assert.equal(calc.companyCents, 21000);
 });
 
 test('un día que no cubre gastos no deja nada que repartir', () => {
@@ -53,7 +53,7 @@ test('los gastos del día se reparten según lo que ha facturado cada uno', () =
   // Equipo 250 € (él 150), gastos 150 €: sobran 100 € y le tocan 60 €.
   const calc = calcSobreGanancias(socio, [servicio(15000)], dia(25000, 15000));
   assert.equal(calc.umbral.excesoCents, 6000);
-  assert.equal(calc.commissionCents, 3600); // el 60 % de 60 €
+  assert.equal(calc.commissionCents, 2400); // el 40 % de 60 €
 });
 
 test('cada día va por su cuenta: uno malo no se come al bueno', () => {
@@ -63,7 +63,7 @@ test('cada día va por su cuenta: uno malo no se come al bueno', () => {
   });
   assert.equal(calc.umbral.diasSinCubrir, 1);
   assert.equal(calc.umbral.excesoCents, 10000);
-  assert.equal(calc.commissionCents, 6000);
+  assert.equal(calc.commissionCents, 4000);
 });
 
 test('el desglose cuadra con lo que se paga, también con retención', () => {
@@ -74,10 +74,10 @@ test('el desglose cuadra con lo que se paga, también con retención', () => {
     ...dia(25000, 15000),
     retencion: { percent: 15, desde: '2026-08-10', baseTotal: 25000, baseAfectada: 25000 },
   });
-  assert.equal(con.grossCommissionCents, 6000);
-  assert.equal(con.retentionCents, 900);
-  assert.equal(con.commissionCents, 5100);
-  assert.equal(con.breakdown.reduce((a, b) => a + b.amountCents, 0), 5100);
+  assert.equal(con.grossCommissionCents, 4000);
+  assert.equal(con.retentionCents, 600);
+  assert.equal(con.commissionCents, 3400);
+  assert.equal(con.breakdown.reduce((a, b) => a + b.amountCents, 0), 3400);
 });
 
 test('cambiar el reparto cambia lo que se lleva cada uno', () => {
