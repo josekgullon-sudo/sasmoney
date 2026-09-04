@@ -101,6 +101,21 @@
     sync();
   }
 
+  // Reparto de ganancias: al escribir lo de la empresa se ve al momento lo que
+  // le queda al trabajador. Los dos números a la vista, sin tener que restar.
+  var profitInput = document.querySelector('[data-profit-input]');
+  if (profitInput) {
+    var empresaOut = document.querySelector('[data-profit-empresa]');
+    var trabajadorOut = document.querySelector('[data-profit-trabajador]');
+    profitInput.addEventListener('input', function () {
+      var empresa = Number(String(profitInput.value).replace(',', '.'));
+      if (!isFinite(empresa)) return;
+      empresa = Math.min(100, Math.max(0, empresa));
+      if (empresaOut) empresaOut.textContent = String(empresa);
+      if (trabajadorOut) trabajadorOut.textContent = String(Math.round((100 - empresa) * 100) / 100);
+    });
+  }
+
   // Al abrir la pantalla de alta, el cursor va directo al importe.
   var focusTarget = document.querySelector('[data-autofocus]');
   if (focusTarget && !('ontouchstart' in window)) focusTarget.focus();

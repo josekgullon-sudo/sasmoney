@@ -60,13 +60,15 @@ CREATE TABLE IF NOT EXISTS users (
   role             TEXT    NOT NULL CHECK (role IN ('admin','worker')),
   active           INTEGER NOT NULL DEFAULT 1,
 
-  -- Regla de comisión: 'percent' | 'tiers' | 'fixed'
+  -- Regla de comisión: 'percent' | 'tiers' | 'fixed' | 'profit'
   commission_type  TEXT    NOT NULL DEFAULT 'percent',
   commission_percent REAL  NOT NULL DEFAULT 0,       -- para 'percent'
   investment_share REAL   NOT NULL DEFAULT 0,       -- % de la inversión que carga
   fixed_cents      INTEGER NOT NULL DEFAULT 0,       -- para 'fixed' (por servicio)
   tiers_json       TEXT    NOT NULL DEFAULT '[]',    -- para 'tiers'
   tier_mode        TEXT    NOT NULL DEFAULT 'total' CHECK (tier_mode IN ('total','progressive')),
+  -- para 'profit': lo que se lleva LA EMPRESA de las ganancias; el resto es suyo.
+  profit_company_percent REAL NOT NULL DEFAULT 40,
 
   created_at       TEXT    NOT NULL DEFAULT (datetime('now'))
 );
@@ -201,6 +203,12 @@ function migrate() {
     // Qué porcentaje de la inversión carga cada trabajador cuando el reparto
     // se hace a mano en lugar de por facturación.
     db.exec('ALTER TABLE users ADD COLUMN investment_share REAL NOT NULL DEFAULT 0');
+  }
+
+  if (!userCols.includes('profit_company_percent')) {
+    // Para el trato de repartir ganancias: lo que se lleva la empresa. A quien
+    // ya estaba dado de alta no le cambia nada, porque su regla es otra.
+    db.exec('ALTER TABLE users ADD COLUMN profit_company_percent REAL NOT NULL DEFAULT 40');
   }
 
   // El CHECK de 'kind' no admitía los gastos diarios y SQLite no deja cambiar un

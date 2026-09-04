@@ -12,6 +12,7 @@ process.env.DATA_DIR = tmp;
 const { db } = require('../src/db');
 const repo = require('../src/repo');
 const retention = require('../src/retention');
+const expenses = require('../src/expenses');
 
 // Sin retención, para que los números de estas pruebas sean los de la comisión.
 retention.setRetention({ percent: 0, desde: '2026-08-10' });
@@ -163,4 +164,58 @@ test('al cerrar con corte se guarda hasta dónde se liquidó de verdad', () => {
   assert.equal(guardada.period_from, '2026-08-01');
   // No pone el 31 de agosto: pone el día en el que se cortó.
   assert.equal(guardada.period_to, DIA);
+});
+
+test('el trabajador que reparte ganancias cobra sobre lo que queda tras gastos', () => {
+  db.exec('DELETE FROM entries; DELETE FROM settlements; DELETE FROM users; DELETE FROM expenses');
+
+  // Anita, al 50 % de lo que factura; Bea, que reparte ganancias con la empresa
+  // (40 % para la empresa, 60 % para ella).
+  db.prepare(
+    `INSERT INTO users (id, username, name, password_hash, role, commission_type, commission_percent)
+     VALUES (1, 'anita', 'Anita', 'x', 'worker', 'percent', 50)`
+  ).run();
+  db.prepare(
+    `INSERT INTO users (id, username, name, password_hash, role, commission_type, profit_company_percent)
+     VALUES (2, 'bea', 'Bea', 'x', 'worker', 'profit', 40)`
+  ).run();
+
+  // El día cuesta 150 €.
+  expenses.createExpense({
+    name: 'Publicidad',
+    amount_cents: 15000,
+    kind: 'daily',
+    anchor_date: DIA,
+    notes: '',
+    is_investment: 1,
+  });
+
+  // Ese día el equipo factura 250 €: 150 € Anita y 100 € Bea.
+  const alta = db.prepare(
+    `INSERT INTO entries (user_id, service_date, service_time, amount_cents) VALUES (?, ?, '10:00', ?)`
+  );
+  alta.run(1, DIA, 15000);
+  alta.run(2, DIA, 10000);
+
+  const bea = repo.getUser(2);
+  const [fila] = repo.settlementRows({ from: DIA, to: DIA, userId: 2 });
+
+  // De los 100 € que trajo, le tocan 60 € de los gastos del día (100/250 de 150 €)
+  // y le quedan 40 € de ganancia: se lleva el 60 %, o sea 24 €.
+  assert.equal(fila.calc.umbral.facturadoCents, 10000);
+  assert.equal(fila.calc.umbral.gastosCents, 6000);
+  assert.equal(fila.calc.umbral.excesoCents, 4000);
+  assert.equal(fila.calc.commissionCents, 2400);
+  assert.equal(fila.calc.companyCents, 7600);
+  assert.match(fila.calc.label, /ganancias/);
+
+  // Y no es el 60 % de lo facturado, que serían 60 €.
+  assert.notEqual(fila.calc.commissionCents, 6000);
+
+  // Al cerrarla se paga eso mismo y sus servicios quedan liquidados.
+  const hecho = repo.closeSettlement({ worker: bea, from: DIA, to: DIA });
+  assert.equal(hecho.commissionCents, 2400);
+  assert.equal(repo.settlementRows({ from: DIA, to: DIA, userId: 2 }).length, 0);
+
+  db.exec('DELETE FROM expenses');
 });

@@ -10,11 +10,27 @@
  *                 'total'       → se aplica a TODO el importe el % del tramo alcanzado.
  *                 'progressive' → cada tramo cobra su % sólo sobre la parte que le toca.
  *  - 'fixed'    → una cantidad fija por servicio realizado.
+ *  - 'profit'   → se reparten las **ganancias**, no lo facturado: a lo que trae
+ *                 se le quitan primero los gastos que le tocan de esos días, y
+ *                 lo que queda se parte entre la empresa y el trabajador.
  *
  * Todos los importes viajan en céntimos (enteros) para no arrastrar errores de coma flotante.
  */
 
-const COMMISSION_TYPES = ['percent', 'tiers', 'fixed'];
+const COMMISSION_TYPES = ['percent', 'tiers', 'fixed', 'profit'];
+
+/**
+ * El reparto de las ganancias, en porcentaje.
+ *
+ * Se guarda lo que se lleva **la empresa** porque es como se habla de este trato
+ * ("la empresa se lleva el 40 % de las ganancias"); lo del trabajador es el
+ * resto. Las dos cifras se enseñan juntas en la ficha para que no haya duda de
+ * cuál es cuál.
+ */
+function profitShares(rule) {
+  const empresa = Math.min(100, Math.max(0, Number(rule.profit_company_percent) || 0));
+  return { empresa, trabajador: 100 - empresa };
+}
 
 /** Normaliza y ordena los tramos guardados en la ficha del trabajador. */
 function parseTiers(raw) {
@@ -61,7 +77,19 @@ function calcCommission(rule, totals) {
   let label = '';
   const breakdown = [];
 
-  if (type === 'fixed') {
+  if (type === 'profit') {
+    // Repartir ganancias exige saber lo que costó cada día, y eso lo lleva
+    // threshold.js. Aquí sólo se llega con la ganancia ya calculada (o sin
+    // servicios que repartir, que es lo mismo que no haber ganado nada).
+    const { empresa, trabajador } = profitShares(rule);
+    const gananciaCents = Math.max(0, Math.round(Number(totals.gananciaCents) || 0));
+    commissionCents = Math.round((gananciaCents * trabajador) / 100);
+    label = `${fmtPercent(trabajador)} de las ganancias (la empresa, ${fmtPercent(empresa)})`;
+    breakdown.push({
+      concept: `${formatEuro(gananciaCents)} de ganancias × ${fmtPercent(trabajador)}`,
+      amountCents: commissionCents,
+    });
+  } else if (type === 'fixed') {
     const fixed = Math.max(0, Math.round(Number(rule.fixed_cents) || 0));
     commissionCents = fixed * serviceCount;
     label = `${formatEuro(fixed)} por servicio`;
@@ -165,6 +193,10 @@ function retentionLabel(retencion) {
 /** Descripción corta de la regla, para listados y fichas. */
 function ruleLabel(rule) {
   const type = rule.commission_type;
+  if (type === 'profit') {
+    const { empresa, trabajador } = profitShares(rule);
+    return `${fmtPercent(trabajador)} de las ganancias (la empresa se lleva ${fmtPercent(empresa)})`;
+  }
   if (type === 'fixed') return `${formatEuro(rule.fixed_cents)} por servicio`;
   if (type === 'tiers') {
     const tiers = parseTiers(rule.tiers_json);
@@ -220,6 +252,7 @@ function parseAmountToCents(input) {
 
 module.exports = {
   COMMISSION_TYPES,
+  profitShares,
   calcCommission,
   calcRetention,
   retentionLabel,

@@ -307,6 +307,10 @@ function readCommission(body) {
 
   const percent = Math.min(100, Math.max(0, Number(String(body.commission_percent || '0').replace(',', '.')) || 0));
   const fixed_cents = parseAmountToCents(body.fixed_amount) || 0;
+  const profit_company_percent = Math.min(
+    100,
+    Math.max(0, Number(String(body.profit_company_percent ?? '40').replace(',', '.')) || 0)
+  );
 
   const froms = [].concat(body.tier_from || []);
   const percents = [].concat(body.tier_percent || []);
@@ -330,6 +334,7 @@ function readCommission(body) {
       fixed_cents,
       tiers_json: JSON.stringify(tiers),
       tier_mode: body.tier_mode === 'progressive' ? 'progressive' : 'total',
+      profit_company_percent,
     },
   };
 }
@@ -359,8 +364,8 @@ router.post('/trabajadores', (req, res) => {
   }
 
   db.prepare(
-    `INSERT INTO users (username, name, password_hash, role, commission_type, commission_percent, fixed_cents, tiers_json, tier_mode)
-     VALUES (@username, @name, @password_hash, 'worker', @commission_type, @commission_percent, @fixed_cents, @tiers_json, @tier_mode)`
+    `INSERT INTO users (username, name, password_hash, role, commission_type, commission_percent, fixed_cents, tiers_json, tier_mode, profit_company_percent)
+     VALUES (@username, @name, @password_hash, 'worker', @commission_type, @commission_percent, @fixed_cents, @tiers_json, @tier_mode, @profit_company_percent)`
   ).run({ username, name, password_hash: hashPassword(password), ...data });
 
   res.flash('ok', `${name} ya puede entrar con el usuario "${username}".`);
@@ -411,7 +416,8 @@ router.post('/trabajadores/:id', (req, res) => {
   db.prepare(
     `UPDATE users SET name = @name, username = @username, active = @active,
             commission_type = @commission_type, commission_percent = @commission_percent,
-            fixed_cents = @fixed_cents, tiers_json = @tiers_json, tier_mode = @tier_mode
+            fixed_cents = @fixed_cents, tiers_json = @tiers_json, tier_mode = @tier_mode,
+            profit_company_percent = @profit_company_percent
       WHERE id = @id`
   ).run({ id: worker.id, name, username, active: req.body.active ? 1 : 0, ...data });
 

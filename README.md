@@ -150,7 +150,7 @@ que costó el día, la parte de cada uno y el porcentaje que le tocó, para pode
 Sólo se aplica a quien cobra **un porcentaje**. A los de tramos propios o cantidad fija por
 servicio se les sigue pagando con su regla de siempre.
 
-## Las tres formas de pagar a una trabajadora
+## Las cuatro formas de pagar a una trabajadora
 
 Cada trabajadora tiene su propia regla y la cambias cuando quieras:
 
@@ -159,6 +159,7 @@ Cada trabajadora tiene su propia regla y la cambias cuando quieras:
 | **Un porcentaje** | Se lleva ese % de todo lo que factura | 40 % → factura 1.000 €, cobra 400 € |
 | **Varios porcentajes por tramos** | El % sube según lo que facture | 0 € → 30 %, 2.000 € → 35 %, 4.000 € → 40 % |
 | **Cantidad fija por servicio** | Cobra lo mismo por cada cliente | 15 € por cliente → 20 clientes, 300 € |
+| **Repartir las ganancias** | Se reparte lo que queda **después de gastos** | La empresa el 40 %, ella el 60 % |
 
 En los tramos puedes elegir cómo se aplican:
 
@@ -168,6 +169,27 @@ En los tramos puedes elegir cómo se aplican:
   Factura 3.400 € → 2.000 × 30 % + 1.400 × 40 % = **1.160 €**.
 
 Puedes poner tantos tramos como quieras, no sólo tres.
+
+### Repartir las ganancias
+
+Es un trato distinto: no se comisiona sobre lo que factura, sino sobre lo que **gana**. Primero
+se le descuenta la parte que le toca de los gastos de esos días —repartidos igual que en el
+umbral, según lo que haya facturado cada uno ese día— y lo que queda se parte entre la empresa y
+ella. Tú pones lo que se lleva **la empresa** y debajo se ve al momento lo que le queda a ella.
+
+Un día con 150 € de gastos en el que el equipo factura 250 €, y ella trajo 100 €:
+
+| | |
+|---|---|
+| Ha facturado | 100,00 € |
+| Su parte de los gastos del día (100 € de 250 €) | −60,00 € |
+| **Ganancias que se reparten** | **40,00 €** |
+| La empresa se queda el 40 % | −16,00 € |
+| **Se lleva (antes de retención)** | **24,00 €** |
+
+Los días que no llegan a cubrir gastos no dejan ganancia, pero **tampoco restan** de los demás
+días: cada día va por su cuenta, igual que en el umbral. La escalera de tramos no se le aplica,
+porque su trato ya va sobre ganancias. La retención sí, como a todos.
 
 ---
 
@@ -336,7 +358,8 @@ Estructura:
 src/
   server.js          arranque, cookies, sesiones y seguridad básica
   db.js              esquema SQLite (node:sqlite) y creación del administrador
-  commission.js      el motor de cálculo (porcentaje, tramos, fijo)
+  commission.js      el motor de cálculo (porcentaje, tramos, fijo, ganancias)
+  threshold.js       comisionar sólo por encima de los gastos del día, y repartir ganancias
   repo.js            consultas: servicios, totales, liquidaciones
   util.js            fechas, zona horaria, marca y escapado de HTML
   period.js          qué trozo de tiempo se mira: un día, un mes o dos fechas

@@ -1,7 +1,13 @@
 'use strict';
 
 const { getSetting, setSetting } = require('./db');
-const { calcRetention, retentionLabel, formatEuro, fmtPercent } = require('./commission');
+const {
+  calcRetention,
+  retentionLabel,
+  formatEuro,
+  fmtPercent,
+  profitShares,
+} = require('./commission');
 
 /**
  * Comisionar sólo por encima de los gastos del día.
@@ -23,6 +29,11 @@ const { calcRetention, retentionLabel, formatEuro, fmtPercent } = require('./com
  * porcentajes cerrados: así cada trabajador conserva su base (una al 40 %, otra
  * al 35 %) y el tramo sube a los dos por igual. El tramo alcanzado se aplica a
  * todo el exceso de ese día, no sólo a la parte que asoma por encima.
+ *
+ * Ese mismo reparto día a día es el que necesita el trato de **repartir
+ * ganancias** (`calcSobreGanancias`): lo que a cada uno le sobra después de sus
+ * gastos es exactamente su ganancia. Por eso las dos cuentas comparten el mismo
+ * motor y no pueden descuadrar entre ellas.
  */
 
 const POR_DEFECTO = {
@@ -79,6 +90,35 @@ function puntosDe(tramos, excesoCents) {
 }
 
 /**
+ * Lo que le queda a un trabajador cada día después de su parte de los gastos.
+ *
+ * Los gastos del día son de todos, así que se reparten según lo que facturó
+ * cada uno ese día: quien más trajo, más gastos cubre y más le sobra. Lo que
+ * sobra es el exceso sobre gastos, que es lo mismo que decir su ganancia.
+ *
+ * @param {Array} entries      Servicios del trabajador que se están mirando.
+ * @param {Map}   equipoPorDia Lo que facturó **todo el equipo** cada día.
+ * @param {Map}   costePorDia  Lo que costó cada día.
+ */
+function repartoPorDia(entries, equipoPorDia, costePorDia) {
+  const mioPorDia = new Map();
+  for (const e of entries) {
+    mioPorDia.set(e.service_date, (mioPorDia.get(e.service_date) || 0) + e.amount_cents);
+  }
+
+  return [...mioPorDia.keys()].sort().map((fecha) => {
+    const mio = mioPorDia.get(fecha);
+    // Sin dato del equipo se asume que ese día facturó él solo: es lo prudente,
+    // porque así carga con todo el gasto en vez de con una parte inventada.
+    const equipo = equipoPorDia.get(fecha) || mio;
+    const coste = costePorDia.get(fecha) || 0;
+    const excesoEquipo = Math.max(0, equipo - coste);
+    const miExceso = equipo > 0 ? Math.round((excesoEquipo * mio) / equipo) : 0;
+    return { fecha, mio, equipo, coste, miExceso, miCoste: mio - miExceso };
+  });
+}
+
+/**
  * Lo que se le paga a un trabajador cuando sólo se comisiona por encima de los
  * gastos del día.
  *
@@ -91,12 +131,6 @@ function puntosDe(tramos, excesoCents) {
 function calcConUmbral(worker, entries, { tramos, equipoPorDia, costePorDia, retencion = null }) {
   const base = Math.max(0, Number(worker.commission_percent) || 0);
 
-  // Lo que ha facturado este trabajador cada día, de los servicios que se miran.
-  const mioPorDia = new Map();
-  for (const e of entries) {
-    mioPorDia.set(e.service_date, (mioPorDia.get(e.service_date) || 0) + e.amount_cents);
-  }
-
   const dias = [];
   let facturadoCents = 0;
   let gastosCents = 0;
@@ -104,16 +138,8 @@ function calcConUmbral(worker, entries, { tramos, equipoPorDia, costePorDia, ret
   let comisionCents = 0;
   const porTramo = new Map();
 
-  for (const fecha of [...mioPorDia.keys()].sort()) {
-    const mio = mioPorDia.get(fecha);
-    const equipo = equipoPorDia.get(fecha) || mio;
-    const coste = costePorDia.get(fecha) || 0;
-    const excesoEquipo = Math.max(0, equipo - coste);
-
-    // El exceso se reparte según lo que ha facturado cada uno ese día.
-    const miExceso = equipo > 0 ? Math.round((excesoEquipo * mio) / equipo) : 0;
-    const miCoste = mio - miExceso;
-
+  for (const dia of repartoPorDia(entries, equipoPorDia, costePorDia)) {
+    const { fecha, mio, equipo, coste, miExceso, miCoste } = dia;
     const puntos = puntosDe(tramos, miExceso);
     const percent = base + puntos;
     const comision = Math.round((miExceso * percent) / 100);
@@ -162,9 +188,94 @@ function calcConUmbral(worker, entries, { tramos, equipoPorDia, costePorDia, ret
     capped: false,
     umbral: {
       activo: true,
+      modo: 'umbral',
+      concepto: 'Comisiona sobre',
       facturadoCents,
       gastosCents,
       excesoCents,
+      dias,
+      diasSinCubrir: dias.filter((d) => d.miExcesoCents === 0).length,
+    },
+  };
+}
+
+/**
+ * Repartir las ganancias en vez de comisionar sobre lo facturado.
+ *
+ * Es otro trato distinto: a lo que trae se le quitan primero los gastos que le
+ * tocan de esos días —igual que en el umbral, repartidos según lo que facturó
+ * cada uno— y lo que queda, la ganancia, se parte entre la empresa y él.
+ *
+ * Aquí no hay escalera de puntos: el reparto es el mismo gane lo que gane. Y si
+ * un día no cubre sus gastos, ese día no hay ganancia que repartir, pero
+ * tampoco arrastra el agujero a los demás días: cada día va por su cuenta, como
+ * en el umbral.
+ */
+function calcSobreGanancias(worker, entries, { equipoPorDia, costePorDia, retencion = null }) {
+  const { empresa, trabajador } = profitShares(worker);
+
+  const dias = [];
+  let facturadoCents = 0;
+  let gastosCents = 0;
+  let gananciaCents = 0;
+  let comisionCents = 0;
+
+  for (const dia of repartoPorDia(entries, equipoPorDia, costePorDia)) {
+    const comision = Math.round((dia.miExceso * trabajador) / 100);
+
+    facturadoCents += dia.mio;
+    gastosCents += dia.miCoste;
+    gananciaCents += dia.miExceso;
+    comisionCents += comision;
+
+    dias.push({
+      fecha: dia.fecha,
+      equipoCents: dia.equipo,
+      costeCents: dia.coste,
+      mioCents: dia.mio,
+      miExcesoCents: dia.miExceso,
+      percent: trabajador,
+      comisionCents: comision,
+    });
+  }
+
+  const breakdown = [
+    {
+      concept: 'Ha facturado',
+      amountCents: facturadoCents,
+    },
+    {
+      concept: 'Su parte de los gastos de esos días',
+      amountCents: -gastosCents,
+    },
+    {
+      // De los ${gananciaCents} de ganancia, esto es lo que se queda la empresa:
+      // lo que sale de restarlo es justo lo que se lleva el trabajador.
+      concept: `La empresa se queda el ${fmtPercent(empresa)} de los ${formatEuro(gananciaCents)} de ganancias`,
+      amountCents: comisionCents - gananciaCents,
+    },
+  ];
+
+  const retentionCents = calcRetention(retencion, comisionCents);
+  if (retentionCents > 0) {
+    breakdown.push({ concept: retentionLabel(retencion), amountCents: -retentionCents });
+  }
+
+  return {
+    grossCommissionCents: comisionCents,
+    retentionCents,
+    commissionCents: comisionCents - retentionCents,
+    companyCents: facturadoCents - comisionCents + retentionCents,
+    label: `${fmtPercent(trabajador)} de las ganancias (la empresa, ${fmtPercent(empresa)})`,
+    breakdown,
+    capped: false,
+    umbral: {
+      activo: true,
+      modo: 'ganancias',
+      concepto: 'Ganancias que se reparten',
+      facturadoCents,
+      gastosCents,
+      excesoCents: gananciaCents,
       dias,
       diasSinCubrir: dias.filter((d) => d.miExcesoCents === 0).length,
     },
@@ -177,5 +288,7 @@ module.exports = {
   setThreshold,
   normalizaTramos,
   puntosDe,
+  repartoPorDia,
   calcConUmbral,
+  calcSobreGanancias,
 };

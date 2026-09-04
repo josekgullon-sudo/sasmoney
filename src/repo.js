@@ -24,6 +24,17 @@ function teamBillingByDay(from, to) {
   return new Map(filas.map((f) => [f.fecha, f.total]));
 }
 
+/** Lo que facturó el equipo y lo que costó cada día que tocan estos servicios. */
+function porDia(entries) {
+  const fechas = entries.map((e) => e.service_date).sort();
+  const desde = fechas[0];
+  const hasta = fechas[fechas.length - 1];
+  return {
+    equipoPorDia: teamBillingByDay(desde, hasta),
+    costePorDia: expenses.costByDay(desde, hasta),
+  };
+}
+
 /**
  * Lo que hay que pagarle a un trabajador por unos servicios, ya con la
  * retención aplicada. Todo el mundo pasa por aquí para que no se le olvide a
@@ -37,14 +48,19 @@ function commissionForEntries(worker, entries) {
   const retencion = retention.forEntries(worker, entries);
   const umbral = threshold.getThreshold();
 
+  // Quien reparte ganancias necesita siempre la cuenta día a día, esté puesto o
+  // no el umbral: sin saber lo que costó el día no hay ganancia que repartir.
+  if (entries.length > 0 && worker.commission_type === 'profit') {
+    return threshold.calcSobreGanancias(worker, entries, {
+      ...porDia(entries),
+      retencion,
+    });
+  }
+
   if (umbral.activo && entries.length > 0 && worker.commission_type === 'percent') {
-    const fechas = entries.map((e) => e.service_date).sort();
-    const desde = fechas[0];
-    const hasta = fechas[fechas.length - 1];
     return threshold.calcConUmbral(worker, entries, {
       tramos: umbral.tramos,
-      equipoPorDia: teamBillingByDay(desde, hasta),
-      costePorDia: expenses.costByDay(desde, hasta),
+      ...porDia(entries),
       retencion,
     });
   }
@@ -375,6 +391,7 @@ const closeSettlement = transaction(({ worker, from, to, corte = null, maxCents 
         fixed_cents: worker.fixed_cents,
         tiers_json: worker.tiers_json,
         tier_mode: worker.tier_mode,
+        profit_company_percent: worker.profit_company_percent,
         label: calc.label,
         breakdown: calc.breakdown,
         // Se guarda lo retenido para que la liquidación cerrada se explique sola

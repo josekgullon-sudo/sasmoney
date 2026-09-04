@@ -2,7 +2,7 @@
 
 const { esc, formatDate, formatDateShort, formatStamp } = require('../util');
 const { periodQuery, rangeLabel, periodExplained } = require('../period');
-const { ruleLabel, parseTiers } = require('../commission');
+const { ruleLabel, parseTiers, profitShares } = require('../commission');
 const { layout } = require('./layout');
 const { stats, money, emptyState, periodPicker } = require('./common');
 const { PAYMENT_METHODS, metodoLegible } = require('./worker');
@@ -437,13 +437,13 @@ function settlementCard(r, { from, to, onlyPending, limites }) {
       <tr><td>Ha facturado</td><td class="num">${money(r.calc.umbral.facturadoCents)}</td></tr>
       <tr><td>− Su parte de los gastos de esos días</td>
           <td class="num">−${money(r.calc.umbral.gastosCents)}</td></tr>
-      <tr><td><strong>Comisiona sobre</strong></td>
+      <tr><td><strong>${esc(r.calc.umbral.concepto || 'Comisiona sobre')}</strong></td>
           <td class="num"><strong>${money(r.calc.umbral.excesoCents)}</strong></td></tr>
     </tbody></table></div>
     ${
       r.calc.umbral.diasSinCubrir > 0
         ? `<p class="small muted">${r.calc.umbral.diasSinCubrir} día(s) no llegaron a cubrir gastos:
-           esos no comisionan.</p>`
+           ${r.calc.umbral.modo === 'ganancias' ? 'esos días no dejaron ganancia' : 'esos no comisionan'}.</p>`
         : ''
     }`
       : ''
@@ -473,7 +473,9 @@ function settlementCard(r, { from, to, onlyPending, limites }) {
       <div class="table-wrap"><table>
         <thead><tr>
           <th>Día</th><th class="num hide-narrow">Equipo</th><th class="num hide-narrow">Gastos</th>
-          <th class="num">Suyo</th><th class="num">Comisiona</th><th class="num">%</th><th class="num">Se lleva</th>
+          <th class="num">Suyo</th>
+          <th class="num">${r.calc.umbral.modo === 'ganancias' ? 'Gana' : 'Comisiona'}</th>
+          <th class="num">%</th><th class="num">Se lleva</th>
         </tr></thead>
         <tbody>
           ${r.calc.umbral.dias
@@ -647,8 +649,10 @@ function adminWorkerForm({ user, flash, warning, worker }) {
     fixed_cents: 0,
     tiers_json: '[]',
     tier_mode: 'total',
+    profit_company_percent: 40,
   };
   const tiers = parseTiers(w.tiers_json);
+  const reparto = profitShares(w);
 
   const body = `
 <h1>${isNew ? 'Nuevo trabajador' : esc(w.name)}</h1>
@@ -691,6 +695,7 @@ function adminWorkerForm({ user, flash, warning, worker }) {
         <option value="percent" ${w.commission_type === 'percent' ? 'selected' : ''}>Un porcentaje de todo lo que factura</option>
         <option value="tiers" ${w.commission_type === 'tiers' ? 'selected' : ''}>Varios porcentajes por tramos</option>
         <option value="fixed" ${w.commission_type === 'fixed' ? 'selected' : ''}>Una cantidad fija por servicio</option>
+        <option value="profit" ${w.commission_type === 'profit' ? 'selected' : ''}>Repartir las ganancias (lo que queda después de gastos)</option>
       </select>
     </div>
 
@@ -736,6 +741,30 @@ function adminWorkerForm({ user, flash, warning, worker }) {
         )}">
         <div class="hint">Se le paga esta cantidad por cada cliente que apunte, sea cual sea el importe.</div>
       </div>
+    </div>
+
+    <div data-when-type="profit">
+      <div class="field">
+        <label for="profit_company_percent">De las ganancias, la empresa se lleva</label>
+        <input id="profit_company_percent" name="profit_company_percent" inputmode="decimal"
+               value="${esc(reparto.empresa)}" data-profit-input>
+        <div class="hint">
+          La empresa se lleva el <strong data-profit-empresa>${esc(reparto.empresa)}</strong> %
+          y ${isNew ? 'el trabajador' : esc(w.name)}, el
+          <strong data-profit-trabajador>${esc(reparto.trabajador)}</strong> %.
+        </div>
+      </div>
+      <p class="hint">
+        Aquí no se comisiona sobre lo que factura, sino sobre lo que <strong>gana</strong>: primero
+        se le descuenta la parte de los gastos del día que le toca (según lo que haya facturado ese
+        día), y lo que queda se reparte. Los días que no llegan a cubrir gastos no dejan ganancia,
+        pero tampoco restan de los demás días.
+      </p>
+      <p class="hint">
+        Ejemplo: un día el equipo factura 500 € y el día cuesta 150 €. A quien haya traído la
+        mitad le quedan 175 € de ganancia, así que se lleva 105 €.
+      </p>
+      <p class="hint">La escalera de tramos por cubrir gastos no se le aplica: su trato ya va sobre ganancias.</p>
     </div>
   </div>
 
