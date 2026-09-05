@@ -445,7 +445,7 @@ ${stats([
               ? `<div class="banner ok" style="margin:0 0 12px">
                    <strong>${esc(r.user.name)}</strong>: no queda nada pendiente en este periodo. Está todo liquidado.
                  </div>`
-              : settlementCard(r, { from, to, onlyPending, limites })
+              : settlementCard(r, { from, to, onlyPending, limites, hoy })
           )
           .join('')
   }
@@ -487,7 +487,7 @@ ${stats([
   return layout({ title: 'Liquidación', user, body, active: 'liquidacion', flash, warning });
 }
 
-function settlementCard(r, { from, to, onlyPending, limites }) {
+function settlementCard(r, { from, to, onlyPending, limites, hoy = '' }) {
   return `<div class="card" style="box-shadow:none;margin-bottom:12px">
   <div class="item" style="border:0;padding-top:0">
     <div class="grow">
@@ -538,7 +538,14 @@ function settlementCard(r, { from, to, onlyPending, limites }) {
               formatDateShort(r.calc.beneficio.hasta)
             )}, los días que aún no le habías pagado.`
           : 'Ya le has pagado todos los días de este periodo.'
-      }</p>`
+      }</p>
+    ${
+      hoy && r.calc.beneficio.hasta > hoy
+        ? `<p class="small" style="color:var(--warn)">Este periodo todavía no ha acabado y ya cuentan
+           los gastos de todos sus días, también los que faltan por caer. Su cuenta no se cierra
+           hasta el final, así que ahora puede salir en negativo y cambiar hasta entonces.</p>`
+        : ''
+    }`
       : r.calc.umbral
       ? `<div class="table-wrap"><table><tbody>
       <tr><td>Ha facturado</td><td class="num">${money(r.calc.umbral.facturadoCents)}</td></tr>

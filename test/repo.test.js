@@ -261,3 +261,33 @@ test('al socio los días malos le restan de los buenos', () => {
 
   db.exec('DELETE FROM expenses');
 });
+
+test('el socio cuenta el periodo entero, con los gastos que aún no han caído', () => {
+  db.exec('DELETE FROM entries; DELETE FROM settlements; DELETE FROM users; DELETE FROM expenses');
+  db.prepare(
+    `INSERT INTO users (id, username, name, password_hash, role, commission_type, profit_company_percent)
+     VALUES (2, 'bea', 'Bea', 'x', 'worker', 'profit', 60)`
+  ).run();
+
+  // Un mes entero con 10 € de publicidad al día y nada facturado: 31 días de
+  // gastos, también los que aún no han pasado. Su cuenta no se cierra hasta
+  // final de mes, así que está en pérdidas igual que la empresa.
+  const mes = { from: '2026-12-01', to: '2026-12-31' };
+  expenses.createExpense({
+    name: 'Publicidad', amount_cents: 1000, kind: 'daily', anchor_date: mes.from, notes: '', is_investment: 1,
+  });
+
+  const bea = repo.getUser(2);
+  const calc = repo.beneficioFor(bea, mes);
+  assert.equal(calc.beneficio.diasCount, 31);
+  assert.equal(calc.beneficio.gastosCents, 31000);
+  assert.equal(calc.beneficio.gananciaCents, -31000);
+  // En pérdidas no cobra, pero tampoco pone dinero.
+  assert.equal(calc.commissionCents, 0);
+
+  // Con "sólo hasta hoy" sí se corta, que es lo que hace ese interruptor.
+  const cortado = repo.beneficioFor(bea, { ...mes, hastaHoy: true });
+  assert.equal(cortado.beneficio.diasCount, 0);
+
+  db.exec('DELETE FROM expenses');
+});

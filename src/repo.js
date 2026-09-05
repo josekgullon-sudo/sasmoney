@@ -72,9 +72,9 @@ function commissionForEntries(worker, entries) {
  * Lo mismo, buscando los servicios por su cuenta. Con el umbral puesto hace
  * falta la lista día a día, así que los totales sueltos ya no bastan.
  */
-function commissionFor({ userId, from, to, pendingOnly = false }) {
+function commissionFor({ userId, from, to, pendingOnly = false, hastaHoy = false }) {
   const worker = getUser(userId);
-  if (cobraDelBeneficio(worker)) return beneficioFor(worker, { from, to, pendingOnly });
+  if (cobraDelBeneficio(worker)) return beneficioFor(worker, { from, to, pendingOnly, hastaHoy });
   return commissionForEntries(worker, listEntries({ userId, from, to, pendingOnly }));
 }
 
@@ -133,12 +133,15 @@ function sumaDias(mapa, dias) {
  * ingresos, menos todos los gastos y menos lo que cobran las trabajadoras. Se
  * suma el periodo **entero**, sin poner a cero los días malos: un día en
  * pérdidas resta de los buenos, porque eso es lo que gana de verdad el negocio.
+ *
+ * Y el periodo entero es **el que se está mirando**, con los gastos que aún no
+ * han caído incluidos. Si miras el mes en marcha, él está en números rojos como
+ * lo está la empresa: su cuenta no se cierra hasta que el mes acaba. Con
+ * `hastaHoy` se corta en hoy, que es lo que hace el interruptor "Sólo hasta
+ * hoy" del resumen, y así su cifra siempre cuadra con la de "Me queda".
  */
-function beneficioFor(worker, { from, to, pendingOnly = false }) {
-  // Nunca se cuentan días que aún no han pasado: no han podido facturar nada,
-  // pero sus gastos fijos ya están repartidos, así que contarlos daría siempre
-  // pérdidas y el socio saldría a cero hasta fin de mes.
-  const tope = to > todayISO() ? todayISO() : to;
+function beneficioFor(worker, { from, to, pendingOnly = false, hastaHoy = false }) {
+  const tope = hastaHoy && to > todayISO() ? todayISO() : to;
   if (tope < from) return profit.calcReparto(worker, { dias: [], retencion: null });
 
   const dias = pendingOnly ? diasPendientes(worker.id, from, tope) : listDays(from, tope);
@@ -402,6 +405,7 @@ function settlementRows({
   pendingOnly = true,
   includeEmpty = false,
   userId = null,
+  hastaHoy = false,
 }) {
   const hasta = aplicaCorte({ from, to, corte });
   // Con un trabajador elegido se enseña sólo el suyo, y aunque no tenga nada
@@ -417,7 +421,7 @@ function settlementRows({
     // Quien cobra del beneficio no tiene servicios: su fila va por días, y el
     // corte de la hora no le afecta (el beneficio se cuenta por días enteros).
     if (cobraDelBeneficio(worker)) {
-      const calc = beneficioFor(worker, { from, to: hasta.to, pendingOnly });
+      const calc = beneficioFor(worker, { from, to: hasta.to, pendingOnly, hastaHoy });
       if (calc.commissionCents === 0 && !includeEmpty && calc.beneficio.diasCount === 0) continue;
       rows.push({
         user: worker,

@@ -207,8 +207,62 @@ function periodQuery(periodo, extra = {}) {
   return params.toString();
 }
 
+/* ------------------------------------------------ Comparar con otro periodo
+ *
+ * "¿Vamos mejor o peor?" sólo se contesta contra algo. Se puede comparar con
+ * el trozo de tiempo justo anterior (lo normal), con las mismas fechas del mes
+ * pasado o del año pasado, o con dos fechas cualesquiera.
+ */
+
+const COMPARACIONES = {
+  anterior: 'El periodo anterior',
+  mes_pasado: 'El mes pasado',
+  ano_pasado: 'El año pasado',
+  no: 'No comparar',
+};
+
+/** El mismo día de hace n meses; si ese día no existe, el último del mes. */
+function mesesAtras(fecha, n) {
+  const [y, m, d] = fecha.split('-').map(Number);
+  const total = y * 12 + (m - 1) - n;
+  const ay = Math.floor(total / 12);
+  const am = (total % 12) + 1;
+  const ultimo = new Date(Date.UTC(ay, am, 0)).getUTCDate();
+  const dia = Math.min(d, ultimo);
+  return `${String(ay).padStart(4, '0')}-${String(am).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+}
+
+function resolveComparacion(query = {}, periodo) {
+  const modo = String(query.cmp || 'anterior');
+
+  // Dos fechas escritas a mano ganan a cualquier atajo.
+  const from = String(query.cmp_from || '');
+  const to = String(query.cmp_to || '');
+  if (isValidDate(from) && isValidDate(to)) {
+    const [a, b] = from <= to ? [from, to] : [to, from];
+    return { modo: 'fechas', from: a, to: b, label: `del ${formatDateShort(a)} al ${formatDateShort(b)}` };
+  }
+
+  if (modo === 'no' || !COMPARACIONES[modo]) return null;
+
+  if (modo === 'mes_pasado' || modo === 'ano_pasado') {
+    const n = modo === 'mes_pasado' ? 1 : 12;
+    const a = mesesAtras(periodo.from, n);
+    const b = mesesAtras(periodo.to, n);
+    return { modo, from: a, to: b, label: COMPARACIONES[modo].toLowerCase() };
+  }
+
+  // El trozo justo anterior, del mismo número de días.
+  const dias = daysBetween(periodo.from, periodo.to);
+  const b = addDays(periodo.from, -1);
+  return { modo: 'anterior', from: addDays(b, -(dias - 1)), to: b, label: 'el periodo anterior' };
+}
+
 module.exports = {
   ATAJOS,
+  COMPARACIONES,
+  resolveComparacion,
+  mesesAtras,
   ATAJO_LABELS,
   ATAJOS_RAPIDOS,
   resolvePeriod,

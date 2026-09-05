@@ -27,13 +27,18 @@ router.get('/', (req, res) => {
   const periodo = resolvePeriod(req.query);
   const { from, to } = periodo;
 
+  // Con el periodo aún en marcha se puede mirar de dos maneras: el periodo
+  // entero (con lo que falta por caer) o sólo lo que ya ha corrido.
+  const vista = readVista(req.query);
+  const hastaHoy = vista === 'hastahoy';
+
   // Se incluyen todos los trabajadores en activo, hayan facturado o no: los
   // gastos generales se reparten entre todos y la cuenta tiene que cuadrar.
   const base = repo
-    .settlementRows({ from, to, pendingOnly: false, includeEmpty: true })
+    .settlementRows({ from, to, pendingOnly: false, includeEmpty: true, hastaHoy })
     .filter((r) => r.user.active || r.count > 0)
     .map((r) => {
-    const pendingCalc = repo.commissionFor({ userId: r.user.id, from, to, pendingOnly: true });
+    const pendingCalc = repo.commissionFor({ userId: r.user.id, from, to, pendingOnly: true, hastaHoy });
     return { ...r, pendingCommissionCents: pendingCalc.commissionCents };
   });
 
@@ -54,9 +59,6 @@ router.get('/', (req, res) => {
   const gastosMes = expenses.rangeSummary({ from, to, direction: 'out' });
   const ingresosMes = expenses.rangeSummary({ from, to, direction: 'in' });
 
-  // Con el periodo aún en marcha se puede mirar de dos maneras: el periodo
-  // entero (con lo que falta por caer) o sólo lo que ya ha corrido.
-  const vista = readVista(req.query);
   const cifra = (x) => (vista === 'hastahoy' ? x.hastaHoyCents : x.totalCents);
   const inversionCents = cifra(gastosMes.inversion);
   const otrosGastosCents = cifra(gastosMes.otros);
@@ -85,11 +87,11 @@ router.get('/', (req, res) => {
 
   // Para las gráficas: día a día de lo que entró y de lo que costó. Sólo hasta
   // hoy, que un día que no ha pasado no tiene nada que enseñar.
-  const hastaHoy = periodo.corte || from;
-  const facturaPorDia = repo.teamBillingByDay(from, hastaHoy);
-  const costeDia = expenses.costByDay(from, hastaHoy);
+  const topeGrafica = periodo.corte || from;
+  const facturaPorDia = repo.teamBillingByDay(from, topeGrafica);
+  const costeDia = expenses.costByDay(from, topeGrafica);
   const diasGrafica = periodo.corte
-    ? repo.listDays(from, hastaHoy).map((fecha) => ({
+    ? repo.listDays(from, topeGrafica).map((fecha) => ({
         fecha,
         facturadoCents: facturaPorDia.get(fecha) || 0,
         costeCents: costeDia.get(fecha) || 0,
