@@ -8,7 +8,13 @@ const fs = require('node:fs');
 const tmp = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'sasmoney-umbral-'));
 process.env.DATA_DIR = tmp;
 
-const { calcConUmbral, normalizaTramos, puntosDe } = require('../src/threshold');
+const {
+  calcConUmbral,
+  normalizaTramos,
+  puntosDe,
+  tramosDe,
+  tieneTramosPropios,
+} = require('../src/threshold');
 
 const DIA = '2026-09-03';
 const anita = { commission_type: 'percent', commission_percent: 40 };
@@ -133,4 +139,47 @@ test('la escalera se ordena sola y siempre arranca en 0', () => {
   assert.equal(puntosDe(t, 19999), 0);
   assert.equal(puntosDe(t, 20000), 5);
   assert.equal(puntosDe(t, 999999), 10);
+});
+
+test('cada trabajador puede tener su propia escalera', () => {
+  const general = normalizaTramos([{ min_cents: 0, puntos: 0 }, { min_cents: 20000, puntos: 5 }]);
+
+  // Sin nada suyo, la general.
+  assert.deepEqual(tramosDe({ commission_percent: 40 }, general), general);
+  assert.equal(tieneTramosPropios({}), false);
+
+  // Con la suya puesta, manda la suya (y se ordena y se completa igual).
+  const suya = { umbral_tramos_json: JSON.stringify([{ min_cents: 10000, puntos: 12 }]) };
+  assert.equal(tieneTramosPropios(suya), true);
+  assert.deepEqual(tramosDe(suya, general), [
+    { min_cents: 0, puntos: 0 },
+    { min_cents: 10000, puntos: 12 },
+  ]);
+
+  // Un json roto o vacío no rompe nada: se sigue la general.
+  assert.deepEqual(tramosDe({ umbral_tramos_json: 'esto no es json' }, general), general);
+  assert.deepEqual(tramosDe({ umbral_tramos_json: '[]' }, general), general);
+});
+
+test('con escalera propia comisiona distinto que sus compañeras', () => {
+  // Equipo 500 €, gastos 100 €: sobran 400 €. Cada una facturó la mitad, así
+  // que a cada una le tocan 200 € de exceso.
+  const contexto = {
+    equipoPorDia: new Map([[DIA, 50000]]),
+    costePorDia: new Map([[DIA, 10000]]),
+  };
+  const general = normalizaTramos([{ min_cents: 0, puntos: 0 }]);
+  const conPremio = { ...anita, umbral_tramos_json: JSON.stringify([{ min_cents: 15000, puntos: 10 }]) };
+
+  const normal = calcConUmbral(anita, [servicio(25000)], {
+    tramos: tramosDe(anita, general),
+    ...contexto,
+  });
+  const premiada = calcConUmbral(conPremio, [servicio(25000)], {
+    tramos: tramosDe(conPremio, general),
+    ...contexto,
+  });
+
+  assert.equal(normal.commissionCents, 8000); // 40 % de 200 €
+  assert.equal(premiada.commissionCents, 10000); // 50 % de 200 €: su tramo propio
 });

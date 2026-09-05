@@ -365,17 +365,7 @@ router.get('/trabajadores', (req, res) => {
 
 /** Comisionar sólo por encima de los gastos del día, y con qué escalera. */
 router.post('/umbral', (req, res) => {
-  const desde = [].concat(req.body.tramo_desde || []);
-  const puntos = [].concat(req.body.tramo_puntos || []);
-
-  const tramos = [];
-  for (let i = 0; i < Math.max(desde.length, puntos.length); i++) {
-    const min_cents = parseAmountToCents(desde[i]);
-    const p = Number(String(puntos[i] ?? '').replace(',', '.'));
-    if (min_cents === null || !Number.isFinite(p)) continue;
-    tramos.push({ min_cents, puntos: Math.max(0, p) });
-  }
-
+  const tramos = leeTramosUmbral(req.body, 'tramo_desde', 'tramo_puntos');
   const activo = Boolean(req.body.activo);
   threshold.setThreshold({ activo, tramos });
 
@@ -383,7 +373,8 @@ router.post('/umbral', (req, res) => {
   res.flash(
     'ok',
     activo
-      ? `Guardado: se comisiona por encima de los gastos del día, con ${puesto.tramos.length} tramo(s).`
+      ? `Guardado: se comisiona por encima de los gastos del día, con ${puesto.tramos.length} tramo(s). ` +
+        'Vale para quien no tenga su propia escalera.'
       : 'Guardado: se vuelve a comisionar sobre todo lo facturado, sin umbral.'
   );
   res.redirect('/admin/trabajadores');
@@ -452,6 +443,15 @@ function readCommission(body) {
     return { error: 'Añade al menos un tramo con su porcentaje.' };
   }
 
+  // Su escalera propia por encima de los gastos del día. Vacío = la general,
+  // así que "volver a la general" es simplemente elegirlo y guardar.
+  const propios = leeTramosUmbral(body, 'w_tramo_desde', 'w_tramo_puntos');
+  if (body.umbral_modo === 'propia' && propios.length === 0) {
+    return { error: 'Añade al menos un tramo a su escalera, o déjale la general.' };
+  }
+  const umbral_tramos_json =
+    body.umbral_modo === 'propia' ? JSON.stringify(threshold.normalizaTramos(propios)) : '';
+
   return {
     data: {
       commission_type,
@@ -460,8 +460,23 @@ function readCommission(body) {
       tiers_json: JSON.stringify(tiers),
       tier_mode: body.tier_mode === 'progressive' ? 'progressive' : 'total',
       profit_company_percent,
+      umbral_tramos_json,
     },
   };
+}
+
+/** Los tramos del umbral que vienen de un formulario (los de la ficha o los generales). */
+function leeTramosUmbral(body, campoDesde, campoPuntos) {
+  const desde = [].concat(body[campoDesde] || []);
+  const puntos = [].concat(body[campoPuntos] || []);
+  const tramos = [];
+  for (let i = 0; i < Math.max(desde.length, puntos.length); i++) {
+    const min_cents = parseAmountToCents(desde[i]);
+    const p = Number(String(puntos[i] ?? '').replace(',', '.'));
+    if (min_cents === null || !Number.isFinite(p)) continue;
+    tramos.push({ min_cents, puntos: Math.max(0, p) });
+  }
+  return tramos;
 }
 
 router.post('/trabajadores', (req, res) => {
@@ -489,8 +504,8 @@ router.post('/trabajadores', (req, res) => {
   }
 
   db.prepare(
-    `INSERT INTO users (username, name, password_hash, role, commission_type, commission_percent, fixed_cents, tiers_json, tier_mode, profit_company_percent)
-     VALUES (@username, @name, @password_hash, 'worker', @commission_type, @commission_percent, @fixed_cents, @tiers_json, @tier_mode, @profit_company_percent)`
+    `INSERT INTO users (username, name, password_hash, role, commission_type, commission_percent, fixed_cents, tiers_json, tier_mode, profit_company_percent, umbral_tramos_json)
+     VALUES (@username, @name, @password_hash, 'worker', @commission_type, @commission_percent, @fixed_cents, @tiers_json, @tier_mode, @profit_company_percent, @umbral_tramos_json)`
   ).run({ username, name, password_hash: hashPassword(password), ...data });
 
   res.flash('ok', `${name} ya puede entrar con el usuario "${username}".`);
@@ -542,7 +557,8 @@ router.post('/trabajadores/:id', (req, res) => {
     `UPDATE users SET name = @name, username = @username, active = @active,
             commission_type = @commission_type, commission_percent = @commission_percent,
             fixed_cents = @fixed_cents, tiers_json = @tiers_json, tier_mode = @tier_mode,
-            profit_company_percent = @profit_company_percent
+            profit_company_percent = @profit_company_percent,
+            umbral_tramos_json = @umbral_tramos_json
       WHERE id = @id`
   ).run({ id: worker.id, name, username, active: req.body.active ? 1 : 0, ...data });
 

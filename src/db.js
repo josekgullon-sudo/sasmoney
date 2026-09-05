@@ -69,6 +69,8 @@ CREATE TABLE IF NOT EXISTS users (
   tier_mode        TEXT    NOT NULL DEFAULT 'total' CHECK (tier_mode IN ('total','progressive')),
   -- para 'profit': lo que se lleva LA EMPRESA de las ganancias; el resto es suyo.
   profit_company_percent REAL NOT NULL DEFAULT 60,
+  -- Escalera propia por encima de los gastos del día; vacío = la general.
+  umbral_tramos_json TEXT NOT NULL DEFAULT '',
 
   created_at       TEXT    NOT NULL DEFAULT (datetime('now'))
 );
@@ -203,6 +205,12 @@ function migrate() {
     // Qué porcentaje de la inversión carga cada trabajador cuando el reparto
     // se hace a mano en lugar de por facturación.
     db.exec('ALTER TABLE users ADD COLUMN investment_share REAL NOT NULL DEFAULT 0');
+  }
+
+  if (!userCols.includes('umbral_tramos_json')) {
+    // Su propia escalera de tramos por encima de gastos. Vacío para todos: se
+    // quedan con la general, que es justo lo que había hasta ahora.
+    db.exec("ALTER TABLE users ADD COLUMN umbral_tramos_json TEXT NOT NULL DEFAULT ''");
   }
 
   if (!userCols.includes('profit_company_percent')) {

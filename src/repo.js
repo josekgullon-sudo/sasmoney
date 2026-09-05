@@ -55,7 +55,8 @@ function commissionForEntries(worker, entries) {
 
   if (umbral.activo && entries.length > 0 && worker.commission_type === 'percent') {
     return threshold.calcConUmbral(worker, entries, {
-      tramos: umbral.tramos,
+      // Cada trabajador puede tener su propia escalera; si no, la general.
+      tramos: threshold.tramosDe(worker, umbral.tramos),
       ...porDia(entries),
       retencion,
     });

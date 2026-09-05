@@ -47,8 +47,8 @@ Cinco pantallas, cada una con una pregunta clara:
   bajado** respecto a otro trozo de tiempo, y el reparto por trabajador, por pueblo, por forma de
   pago, por importe y por hora. Ver abajo.
 - **Servicios** — todos los cobros, con filtros y descarga en CSV.
-- **Trabajadores** — altas, contraseñas, cuánto se lleva cada una, la retención y el umbral de
-  gastos.
+- **Trabajadores** — altas, contraseñas, cuánto se lleva cada una (con su propia escalera de
+  tramos si quieres), la retención y el umbral de gastos.
 
 ### El periodo: no sólo por meses
 
@@ -167,10 +167,15 @@ La cuenta va **día a día**:
 3. A la parte de cada uno se le aplica **su porcentaje de siempre más los puntos del tramo**
    que alcance con esa parte.
 
-La escalera es **una sola para todos y va en puntos**, no en porcentajes cerrados: así cada
-trabajadora conserva su base. Con *desde 500 € → +10*, una que va al 40 % pasa al 50 % y otra
-que va al 35 % pasa al 45 %. El tramo alcanzado se aplica a **todo** el exceso de ese día, no
-sólo a la parte que asoma.
+La escalera va **en puntos**, no en porcentajes cerrados: así cada trabajadora conserva su base.
+Con *desde 500 € → +10*, una que va al 40 % pasa al 50 % y otra que va al 35 % pasa al 45 %. El
+tramo alcanzado se aplica a **todo** el exceso de ese día, no sólo a la parte que asoma.
+
+Hay una **escalera general**, que se pone en la pantalla de Trabajadores y vale para todo el
+mundo, y cada trabajadora puede tener **la suya propia**: en su ficha, dentro de *¿Cuánto se
+lleva?*, se elige entre *la misma que las demás* o *una escalera sólo para ella*. Quien tenga la
+suya no se entera de los cambios en la general; quien no, la sigue. En la lista de trabajadores
+sale marcado quién lleva escalera propia.
 
 Un día con 150 € de gastos, el equipo factura 900 € (Anita 750 €, Milu 150 €) y la escalera es
 *0 € → +0, 200 € → +5, 500 € → +10*:

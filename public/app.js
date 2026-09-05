@@ -47,46 +47,66 @@
     });
   });
 
-  // Tramos de comisión: añadir y quitar filas en la ficha del trabajador.
-  var tiers = document.getElementById('tiers');
-  if (tiers) {
-    var addBtn = document.getElementById('add-tier');
-    if (addBtn) {
-      addBtn.addEventListener('click', function () {
+  /**
+   * Filas que se añaden y se quitan: los tramos de comisión y las escaleras del
+   * umbral (la general y la de cada trabajador) funcionan todas igual.
+   */
+  function filasRepetibles(idLista, idBoton, campos) {
+    var lista = document.getElementById(idLista);
+    if (!lista) return;
+
+    var boton = document.getElementById(idBoton);
+    if (boton) {
+      boton.addEventListener('click', function () {
         var row = document.createElement('div');
         row.className = 'tier-row';
         row.innerHTML =
-          '<div><label>Desde (€ facturados)</label><input type="text" name="tier_from" inputmode="decimal" placeholder="0"></div>' +
-          '<div><label>Porcentaje</label><input type="text" name="tier_percent" inputmode="decimal" placeholder="30"></div>' +
+          campos
+            .map(function (c) {
+              return (
+                '<div><label>' + c.label + '</label>' +
+                '<input type="text" name="' + c.name + '" inputmode="decimal" placeholder="' +
+                c.placeholder + '"></div>'
+              );
+            })
+            .join('') +
           '<button type="button" class="btn ghost small" data-remove-tier>Quitar</button>';
-        tiers.appendChild(row);
+        lista.appendChild(row);
       });
     }
-    tiers.addEventListener('click', function (ev) {
+
+    lista.addEventListener('click', function (ev) {
       var btn = ev.target.closest('[data-remove-tier]');
-      if (btn) btn.closest('.tier-row').remove();
+      // Nunca se queda sin ninguna fila: sin tramos no hay regla que aplicar.
+      if (btn && lista.querySelectorAll('.tier-row').length > 1) btn.closest('.tier-row').remove();
     });
   }
 
-  // La escalera del umbral: añadir y quitar tramos, igual que los de comisión.
-  var umbralTramos = document.getElementById('umbral-tramos');
-  if (umbralTramos) {
-    var addUmbral = document.getElementById('add-umbral-tramo');
-    if (addUmbral) {
-      addUmbral.addEventListener('click', function () {
-        var row = document.createElement('div');
-        row.className = 'tier-row';
-        row.innerHTML =
-          '<div><label>Desde (€ por encima de gastos)</label><input type="text" name="tramo_desde" inputmode="decimal" placeholder="200"></div>' +
-          '<div><label>Puntos de más</label><input type="text" name="tramo_puntos" inputmode="decimal" placeholder="5"></div>' +
-          '<button type="button" class="btn ghost small" data-remove-tier>Quitar</button>';
-        umbralTramos.appendChild(row);
-      });
-    }
-    umbralTramos.addEventListener('click', function (ev) {
-      var btn = ev.target.closest('[data-remove-tier]');
-      if (btn) btn.closest('.tier-row').remove();
-    });
+  var DESDE_GASTOS = 'Desde (€ por encima de gastos)';
+  var PUNTOS = 'Puntos de más';
+
+  filasRepetibles('tiers', 'add-tier', [
+    { label: 'Desde (€ facturados)', name: 'tier_from', placeholder: '0' },
+    { label: 'Porcentaje', name: 'tier_percent', placeholder: '30' },
+  ]);
+  filasRepetibles('umbral-tramos', 'add-umbral-tramo', [
+    { label: DESDE_GASTOS, name: 'tramo_desde', placeholder: '200' },
+    { label: PUNTOS, name: 'tramo_puntos', placeholder: '5' },
+  ]);
+  filasRepetibles('tramos-propios', 'add-tramo-propio', [
+    { label: DESDE_GASTOS, name: 'w_tramo_desde', placeholder: '200' },
+    { label: PUNTOS, name: 'w_tramo_puntos', placeholder: '5' },
+  ]);
+
+  // La escalera propia sólo se enseña si se ha elegido tenerla.
+  var modoUmbral = document.querySelector('[data-umbral-modo]');
+  if (modoUmbral) {
+    var caja = document.querySelector('[data-umbral-propia]');
+    var syncUmbral = function () {
+      if (caja) caja.hidden = modoUmbral.value !== 'propia';
+    };
+    modoUmbral.addEventListener('change', syncUmbral);
+    syncUmbral();
   }
 
   // Muestra u oculta los campos según el tipo de comisión elegido.

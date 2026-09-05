@@ -64,6 +64,37 @@ function normalizaTramos(lista) {
   return tramos;
 }
 
+/**
+ * La escalera que le toca a un trabajador: la suya si la tiene puesta, y si no
+ * la general.
+ *
+ * Cada trabajador puede tener la suya porque no todos rinden igual ni cobran
+ * igual: a una le puedes premiar antes que a otra. Quien no tenga nada propio
+ * sigue la general, que es lo normal y lo que evita tener que repetir la misma
+ * escalera en cada ficha.
+ */
+function tramosDe(worker, general) {
+  const propios = leePropios(worker);
+  return propios ? normalizaTramos(propios) : general;
+}
+
+/** ¿Tiene escalera propia? Devuelve la lista, o null si sigue la general. */
+function leePropios(worker) {
+  try {
+    const raw = String((worker && worker.umbral_tramos_json) || '').trim();
+    if (!raw) return null;
+    const lista = JSON.parse(raw);
+    return Array.isArray(lista) && lista.length > 0 ? lista : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Si tiene escalera propia (para pintarlo distinto en las pantallas). */
+function tieneTramosPropios(worker) {
+  return leePropios(worker) !== null;
+}
+
 function setThreshold({ activo, tramos }) {
   setSetting('umbral_activo', activo ? '1' : '0');
   setSetting('umbral_tramos', JSON.stringify(normalizaTramos(tramos)));
@@ -193,6 +224,8 @@ module.exports = {
   getThreshold,
   setThreshold,
   normalizaTramos,
+  tramosDe,
+  tieneTramosPropios,
   puntosDe,
   repartoPorDia,
   calcConUmbral,

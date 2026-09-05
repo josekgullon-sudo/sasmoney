@@ -3,10 +3,16 @@
 const { esc, formatDate, formatDateShort, formatStamp } = require('../util');
 const { periodQuery, rangeLabel, periodExplained } = require('../period');
 const { ruleLabel, parseTiers, profitShares } = require('../commission');
+const { tieneTramosPropios, tramosDe } = require('../threshold');
 const { layout } = require('./layout');
 const { stats, money, emptyState, periodPicker } = require('./common');
 const graficas = require('./graficas');
 const { PAYMENT_METHODS, metodoLegible } = require('./worker');
+
+/** Los tramos propios de un trabajador, o null si sigue la escalera general. */
+function tramosPropios(worker) {
+  return tieneTramosPropios(worker) ? tramosDe(worker, null) : null;
+}
 
 /** 'agosto 2026' → 'Agosto 2026'. Para los títulos. */
 function primeraMayuscula(texto) {
@@ -701,6 +707,8 @@ function adminWorkers({ user, flash, warning, workers, retencion, umbral }) {
     <button type="button" class="btn ghost small" id="add-umbral-tramo">+ Añadir tramo</button>
     <div class="hint" style="margin-top:8px">Ejemplo: desde 0 € → +0 puntos (su % de siempre),
        desde 200 € → +5, desde 500 € → +10.</div>
+    <div class="hint">Ésta es la <strong>general</strong>: vale para todo el que no tenga la suya.
+       Para ponerle una distinta a alguien, entra en su ficha.</div>
 
     <div class="actions" style="margin-top:14px">
       <button class="btn" type="submit">Guardar</button>
@@ -749,7 +757,9 @@ function adminWorkers({ user, flash, warning, workers, retencion, umbral }) {
           (w) => `<tr>
         <td>${esc(w.name)} ${w.active ? '' : '<span class="pill grey">Inactivo</span>'}</td>
         <td class="muted">${esc(w.username)}</td>
-        <td class="small">${esc(ruleLabel(w))}</td>
+        <td class="small">${esc(ruleLabel(w))}${
+          tramosPropios(w) ? '<div class="small muted">escalera propia</div>' : ''
+        }</td>
         <td class="right"><a class="btn ghost small" href="/admin/trabajadores/${w.id}">Editar</a></td>
       </tr>`
         )
@@ -777,6 +787,7 @@ function adminWorkerForm({ user, flash, warning, worker }) {
   };
   const tiers = parseTiers(w.tiers_json);
   const reparto = profitShares(w);
+  const propios = tramosPropios(w);
 
   const body = `
 <h1>${isNew ? 'Nuevo trabajador' : esc(w.name)}</h1>
@@ -828,6 +839,39 @@ function adminWorkerForm({ user, flash, warning, worker }) {
         <label for="commission_percent">Porcentaje</label>
         <input id="commission_percent" name="commission_percent" inputmode="decimal" value="${esc(w.commission_percent)}">
         <div class="hint">Ejemplo: 40 significa que se lleva el 40 % de lo que factura.</div>
+      </div>
+
+      <div class="field">
+        <label for="umbral_modo">Escalera por encima de los gastos</label>
+        <select id="umbral_modo" name="umbral_modo" data-umbral-modo>
+          <option value="general" ${propios ? '' : 'selected'}>La misma que las demás (la general)</option>
+          <option value="propia" ${propios ? 'selected' : ''}>Una escalera sólo para ${esc(
+            isNew ? 'esta persona' : w.name
+          )}</option>
+        </select>
+        <div class="hint">La general se cambia en la pantalla de Trabajadores y vale para todo el
+           que no tenga la suya.</div>
+      </div>
+
+      <div data-umbral-propia ${propios ? '' : 'hidden'}>
+        <label>Sus tramos</label>
+        <div id="tramos-propios">
+          ${(propios || [{ min_cents: 0, puntos: 0 }])
+            .map(
+              (t) => `<div class="tier-row">
+            <div><label>Desde (€ por encima de gastos)</label><input type="text" name="w_tramo_desde"
+              inputmode="decimal" value="${esc((t.min_cents / 100).toFixed(2).replace('.', ','))}"></div>
+            <div><label>Puntos de más</label><input type="text" name="w_tramo_puntos"
+              inputmode="decimal" value="${esc(String(t.puntos).replace('.', ','))}"></div>
+            <button type="button" class="btn ghost small" data-remove-tier>Quitar</button>
+          </div>`
+            )
+            .join('')}
+        </div>
+        <button type="button" class="btn ghost small" id="add-tramo-propio">+ Añadir tramo</button>
+        <div class="hint" style="margin-top:8px">Van en <strong>puntos sobre su porcentaje</strong>,
+           no en porcentajes cerrados: con su 40 % y un tramo de +10, ese día cobra el 50 %.
+           Ejemplo: desde 0 € → +0, desde 200 € → +5, desde 500 € → +10.</div>
       </div>
     </div>
 
