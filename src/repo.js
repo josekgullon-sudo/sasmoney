@@ -102,6 +102,25 @@ function diasPendientes(userId, from, to) {
   );
 }
 
+/** Lo que facturó el equipo cada hora de un día, para la gráfica del día. */
+function teamBillingByHour(dia) {
+  const filas = db
+    .prepare(
+      `SELECT CAST(SUBSTR(COALESCE(NULLIF(service_time, ''), '00:00'), 1, 2) AS INTEGER) AS hora,
+              COALESCE(SUM(amount_cents), 0) AS total,
+              COUNT(*) AS n
+         FROM entries WHERE service_date = ?
+        GROUP BY hora ORDER BY hora`
+    )
+    .all(dia);
+  const porHora = new Map(filas.map((f) => [f.hora, f]));
+  return Array.from({ length: 24 }, (_, hora) => ({
+    hora,
+    cents: porHora.has(hora) ? porHora.get(hora).total : 0,
+    count: porHora.has(hora) ? porHora.get(hora).n : 0,
+  }));
+}
+
 /** Suma de un Map(fecha → céntimos) sólo en los días que cuentan. */
 function sumaDias(mapa, dias) {
   return dias.reduce((a, d) => a + (mapa.get(d) || 0), 0);
@@ -571,6 +590,8 @@ function listSettlements({ userId = null, limit = 50 } = {}) {
 
 module.exports = {
   cobraDelBeneficio,
+  listDays,
+  teamBillingByHour,
   commissionForEntries,
   commissionFor,
   beneficioFor,

@@ -29,7 +29,8 @@ Pensada para usarse desde el móvil: apuntar un cobro son dos toques.
 
 Cinco pantallas, cada una con una pregunta clara:
 
-- **Resumen** — *¿cómo va?* Lo que entra, lo que se llevan ellas, los gastos y lo que queda.
+- **Resumen** — *¿cómo va?* Lo que entra, lo que se llevan ellas, los gastos y lo que queda,
+  con **las gráficas del periodo** (ver abajo).
   Y una fila por trabajador con lo que factura, su comisión, **su porcentaje de marketing** y
   lo que eso le cuesta, **lo que deja** y lo que le debes, con el botón de liquidar al lado.
   Mientras el mes está en marcha eliges si quieres verlo entero o sólo hasta hoy.
@@ -62,6 +63,22 @@ que puedes guardar en favoritos "los últimos 7 días" o "el 14 de julio" y volv
 Debajo del título siempre pone en una frase qué estás mirando exactamente, para que no haya
 duda entre "el mes entero" y "lo que llevas". Y mientras al periodo le queden días, dos botones
 más dejan elegir entre **Todo el mes** y **Sólo hasta hoy**.
+
+## Las gráficas
+
+En el Resumen, debajo de las cifras, hay dos gráficas para ver de un vistazo **cuáles son los
+mejores días**:
+
+- **Día a día**: una barra por día con lo que facturó todo el equipo. La rayita naranja es lo que
+  costó ese día; si la barra no llega, el día no cubrió gastos y se pinta en rojo. El mejor día
+  sale más oscuro y con su nombre y su cifra debajo.
+- **Por día de la semana**: la **media** de cada lunes, martes… del periodo. Es la media y no la
+  suma a propósito: si en el periodo hay tres sábados y dos domingos, sumar engañaría.
+
+Si estás mirando **un solo día**, en lugar de esas dos sale **hora a hora**, con la mejor hora.
+
+Las barras son HTML normal, no un dibujo ni una librería: los números son texto de verdad, se
+leen bien en cualquier móvil y la página no engorda nada.
 
 ## La retención
 

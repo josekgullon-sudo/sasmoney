@@ -5,6 +5,7 @@ const { periodQuery, rangeLabel, periodExplained } = require('../period');
 const { ruleLabel, parseTiers, profitShares } = require('../commission');
 const { layout } = require('./layout');
 const { stats, money, emptyState, periodPicker } = require('./common');
+const graficas = require('./graficas');
 const { PAYMENT_METHODS, metodoLegible } = require('./worker');
 
 /** 'agosto 2026' → 'Agosto 2026'. Para los títulos. */
@@ -42,10 +43,37 @@ function camposPeriodo(periodo) {
        <input type="hidden" name="to" value="${esc(periodo.to)}">`;
 }
 
+/**
+ * Las gráficas del periodo. Con un solo día se enseñan las horas, que es lo
+ * único que tiene sentido mirar ahí; con varios, el día a día y —si hay semana
+ * suficiente— la media por día de la semana.
+ */
+function graficasCard({ periodo, diasGrafica, horasGrafica }) {
+  const dia = periodo.esUnDia ? graficas.porHora(horasGrafica) : graficas.porDia(diasGrafica);
+  const semana = periodo.esUnDia ? '' : graficas.porDiaSemana(diasGrafica);
+  if (!dia && !semana) return '';
+
+  return `<div class="card" style="margin-top:16px">
+  <h2>${periodo.esUnDia ? 'Hora a hora' : 'Día a día'}</h2>
+  <p class="sub">Lo que ha facturado todo el equipo${
+    periodo.esUnDia ? ' a lo largo del día' : ', para ver de un vistazo cuáles son los mejores días'
+  }.</p>
+  ${dia}
+  ${
+    semana
+      ? `<h3 style="margin:20px 0 0;font-size:1rem">Por día de la semana</h3>
+         <p class="sub" style="margin-top:2px">La media de cada día, no la suma: si en el periodo
+            hay tres sábados y dos domingos, sumar engañaría.</p>
+         ${semana}`
+      : ''
+  }
+</div>`;
+}
+
 function adminHome({
   user, flash, warning, periodo, vista, rows, totals, pendingTotalCents,
   gastos, ingresos, inversion, inversionSinAsignarCents, otrosGastos, trabajadoresActivos,
-  socios = [], sociosCents = 0,
+  socios = [], sociosCents = 0, diasGrafica = [], horasGrafica = [],
 }) {
   const { corte, enCurso } = periodo;
   const q = periodQuery(periodo, { vista });
@@ -84,6 +112,8 @@ ${stats([
   { k: 'Gastos', v: money(gastos.cents), sub: `${money(inversion.cents)} de marketing` },
   { k: 'Me queda', v: money(quedaCents), sub: 'para la empresa', accent: true },
 ])}
+
+${graficasCard({ periodo, diasGrafica, horasGrafica })}
 
 <div class="card" style="margin-top:16px">
   <h2>Cada trabajador</h2>
@@ -263,6 +293,11 @@ ${
                 enCurso,
                 '−'
               )
+            : ''
+        }
+        ${
+          sociosCents > 0
+            ? filaMes('− Reparto del beneficio', orden(sociosCents, sociosCents), enCurso, '−')
             : ''
         }
         ${(() => {

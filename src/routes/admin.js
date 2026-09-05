@@ -83,6 +83,19 @@ router.get('/', (req, res) => {
 
   const proximos = expenses.upcoming({ dias: 92, direction: 'out' });
 
+  // Para las gráficas: día a día de lo que entró y de lo que costó. Sólo hasta
+  // hoy, que un día que no ha pasado no tiene nada que enseñar.
+  const hastaHoy = periodo.corte || from;
+  const facturaPorDia = repo.teamBillingByDay(from, hastaHoy);
+  const costeDia = expenses.costByDay(from, hastaHoy);
+  const diasGrafica = periodo.corte
+    ? repo.listDays(from, hastaHoy).map((fecha) => ({
+        fecha,
+        facturadoCents: facturaPorDia.get(fecha) || 0,
+        costeCents: costeDia.get(fecha) || 0,
+      }))
+    : [];
+
   res.send(
     views.adminHome({
       user: req.user,
@@ -107,6 +120,8 @@ router.get('/', (req, res) => {
         proximo: proximos[0] || null,
       },
       ingresos: { ...ingresosMes, cents: ingresosCents },
+      diasGrafica,
+      horasGrafica: periodo.esUnDia && periodo.corte ? repo.teamBillingByHour(from) : [],
     })
   );
 });
