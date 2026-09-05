@@ -116,7 +116,7 @@
       if (empresaOut) empresaOut.textContent = String(empresa);
       if (trabajadorOut) trabajadorOut.textContent = String(suyo);
       // El ejemplo de abajo, con los números que se acaban de escribir.
-      if (ejemploOut) ejemploOut.textContent = ((175 * suyo) / 100).toFixed(2).replace('.', ',') + ' €';
+      if (ejemploOut) ejemploOut.textContent = ((3000 * suyo) / 100).toFixed(2).replace('.', ',') + ' €';
     });
   }
 

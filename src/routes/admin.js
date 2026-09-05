@@ -37,7 +37,12 @@ router.get('/', (req, res) => {
     return { ...r, pendingCommissionCents: pendingCalc.commissionCents };
   });
 
-  const totals = base.reduce(
+  // Quien cobra del beneficio va aparte: no factura ni carga gastos, se lleva
+  // un pellizco de lo que queda. Mezclarlo con las demás descuadraría la tabla.
+  const socios = base.filter((r) => repo.cobraDelBeneficio(r.user));
+  const equipo = base.filter((r) => !repo.cobraDelBeneficio(r.user));
+
+  const totals = equipo.reduce(
     (acc, r) => ({
       count: acc.count + r.count,
       totalCents: acc.totalCents + r.totalCents,
@@ -58,7 +63,7 @@ router.get('/', (req, res) => {
   const gastosCents = cifra(gastosMes);
   const ingresosCents = cifra(ingresosMes);
 
-  const ordenadas = base.sort((a, b) => b.totalCents - a.totalCents);
+  const ordenadas = equipo.sort((a, b) => b.totalCents - a.totalCents);
 
   // Cada trabajador carga con su porcentaje de la publicidad del periodo.
   const reparto = investment.split(inversionCents, ordenadas);
@@ -87,7 +92,9 @@ router.get('/', (req, res) => {
       vista,
       rows,
       totals,
-      pendingTotalCents: rows.reduce((a, r) => a + r.pendingCommissionCents, 0),
+      socios,
+      sociosCents: socios.reduce((a, r) => a + r.calc.commissionCents, 0),
+      pendingTotalCents: [...rows, ...socios].reduce((a, r) => a + r.pendingCommissionCents, 0),
       inversion: { ...gastosMes.inversion, cents: inversionCents },
       inversionSinAsignarCents: reparto.sinAsignarCents,
       otrosGastos: { ...gastosMes.otros, cents: otrosGastosCents },
@@ -181,11 +188,14 @@ router.post('/liquidacion/cerrar', (req, res) => {
         : `${worker.name} no tiene nada pendiente en ese periodo.`
     );
   } else {
+    const que =
+      result.diasCount === undefined
+        ? `${result.entryCount} servicio(s)`
+        : `${result.diasCount} día(s)`;
     res.flash(
       'ok',
-      `Liquidación cerrada: ${worker.name}, ${result.entryCount} servicio(s), ${formatEuro(
-        result.commissionCents
-      )}.` + (result.fueraCount > 0 ? ` Le quedan ${result.fueraCount} servicio(s) sin liquidar.` : '')
+      `Liquidación cerrada: ${worker.name}, ${que}, ${formatEuro(result.commissionCents)}.` +
+        (result.fueraCount > 0 ? ` Le quedan ${result.fueraCount} servicio(s) sin liquidar.` : '')
     );
   }
 

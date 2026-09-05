@@ -45,18 +45,21 @@ function camposPeriodo(periodo) {
 function adminHome({
   user, flash, warning, periodo, vista, rows, totals, pendingTotalCents,
   gastos, ingresos, inversion, inversionSinAsignarCents, otrosGastos, trabajadoresActivos,
+  socios = [], sociosCents = 0,
 }) {
   const { corte, enCurso } = periodo;
   const q = periodQuery(periodo, { vista });
 
   // Las cifras de arriba siguen la vista elegida; el cuadro de abajo enseña
   // siempre las dos, que es donde se ve la diferencia de un vistazo.
+  // Lo que se lleva quien cobra del beneficio sale de aquí igual que las
+  // comisiones: si no se restara, "Me queda" diría de más.
   const quedaCents =
-    totals.totalCents - totals.commissionCents + ingresos.cents - gastos.cents;
+    totals.totalCents - totals.commissionCents + ingresos.cents - gastos.cents - sociosCents;
   const quedaHoyCents =
-    totals.totalCents - totals.commissionCents + ingresos.hastaHoyCents - gastos.hastaHoyCents;
+    totals.totalCents - totals.commissionCents + ingresos.hastaHoyCents - gastos.hastaHoyCents - sociosCents;
   const quedaMesCents =
-    totals.totalCents - totals.commissionCents + ingresos.totalCents - gastos.totalCents;
+    totals.totalCents - totals.commissionCents + ingresos.totalCents - gastos.totalCents - sociosCents;
 
   // En el cuadro del periodo manda la vista elegida: su columna va primera y
   // siempre se ve; la otra queda al lado, y en el móvil se esconde.
@@ -196,6 +199,39 @@ ${stats([
     <p class="small"><strong>A liquidar</strong>: lo que le debes ahora mismo, de lo que aún no le has pagado.</p>
   </details>
 </div>
+
+${
+  socios.length === 0
+    ? ''
+    : `<div class="card">
+  <h2>Reparto del beneficio</h2>
+  <p class="sub">No cobran por clientes: se llevan un porcentaje de lo que le queda limpio a la
+     empresa ${esc(vista === 'hastahoy' ? rangeLabel(periodo.from, corte) : rangeLabel(periodo.from, periodo.to))}.</p>
+  ${socios
+    .map(
+      (r) => `<div class="item">
+    <div class="grow">
+      <div class="title">${esc(r.user.name)}</div>
+      <div class="meta">${esc(ruleLabel(r.user))}</div>
+      <div class="small muted">Beneficio de esos días: <strong style="color:${
+        r.calc.beneficio.gananciaCents < 0 ? 'var(--danger)' : 'inherit'
+      }">${money(r.calc.beneficio.gananciaCents)}</strong></div>
+    </div>
+    <div style="text-align:right">
+      <div class="money">${money(r.calc.commissionCents)}</div>
+      <div class="small muted">A liquidar: ${money(r.pendingCommissionCents)}</div>
+      ${
+        r.pendingCommissionCents > 0
+          ? `<a class="btn small" href="/admin/liquidacion?worker=${r.user.id}&amp;${esc(q)}">Liquidar</a>`
+          : '<span class="pill ok">Al día</span>'
+      }
+    </div>
+  </div>`
+    )
+    .join('')}
+  <p class="hint">Ya está descontado de "Me queda": lo suyo sale del beneficio, igual que las comisiones.</p>
+</div>`
+}
 
 <div class="card">
   <h2>Cómo va ${esc(periodo.label)}</h2>
@@ -368,7 +404,9 @@ ${stats([
       ? emptyState('No hay nada que liquidar en este periodo.')
       : rows
           .map((r) =>
-            r.count === 0
+            // Quien cobra del beneficio no tiene servicios: su ficha se
+            // enseña mientras le queden días por pagar.
+            r.count === 0 && !(r.calc.beneficio && r.calc.beneficio.diasCount > 0)
               ? `<div class="banner ok" style="margin:0 0 12px">
                    <strong>${esc(r.user.name)}</strong>: no queda nada pendiente en este periodo. Está todo liquidado.
                  </div>`
@@ -419,7 +457,11 @@ function settlementCard(r, { from, to, onlyPending, limites }) {
   <div class="item" style="border:0;padding-top:0">
     <div class="grow">
       <div class="title">${esc(r.user.name)}</div>
-      <div class="meta">${r.count} servicio(s) · ${money(r.totalCents)} facturados · ${esc(ruleLabel(r.user))}</div>
+      <div class="meta">${
+        r.calc.beneficio
+          ? `${r.calc.beneficio.diasCount} día(s) · ${esc(ruleLabel(r.user))}`
+          : `${r.count} servicio(s) · ${money(r.totalCents)} facturados · ${esc(ruleLabel(r.user))}`
+      }</div>
     </div>
     <div class="money" style="font-size:1.25rem">${money(r.calc.commissionCents)}</div>
   </div>
@@ -432,7 +474,37 @@ function settlementCard(r, { from, to, onlyPending, limites }) {
   }
 
   ${
-    r.calc.umbral
+    r.calc.beneficio
+      ? `<div class="table-wrap"><table><tbody>
+      <tr><td>Ha facturado el equipo</td><td class="num">${money(r.calc.beneficio.facturadoCents)}</td></tr>
+      ${
+        r.calc.beneficio.ingresosCents !== 0
+          ? `<tr><td>+ Otros ingresos</td><td class="num">${money(r.calc.beneficio.ingresosCents)}</td></tr>`
+          : ''
+      }
+      <tr><td>− Gastos de esos días (con IVA)</td>
+          <td class="num">−${money(r.calc.beneficio.gastosCents)}</td></tr>
+      <tr><td>− Lo que cobran las trabajadoras</td>
+          <td class="num">−${money(r.calc.beneficio.pagadoCents)}</td></tr>
+      <tr><td><strong>Beneficio de la empresa</strong></td>
+          <td class="num"><strong style="color:${
+            r.calc.beneficio.gananciaCents < 0 ? 'var(--danger)' : 'inherit'
+          }">${money(r.calc.beneficio.gananciaCents)}</strong></td></tr>
+    </tbody></table></div>
+    <p class="small muted">Su ${esc(String(r.calc.beneficio.percent))} % de eso.
+      ${
+        r.calc.beneficio.gananciaCents < 0
+          ? 'Estos días la empresa ha perdido dinero, así que no le toca nada (tampoco pone él).'
+          : ''
+      }
+      ${
+        r.calc.beneficio.diasCount > 0
+          ? `Cuenta del ${esc(formatDateShort(r.calc.beneficio.desde))} al ${esc(
+              formatDateShort(r.calc.beneficio.hasta)
+            )}, los días que aún no le habías pagado.`
+          : 'Ya le has pagado todos los días de este periodo.'
+      }</p>`
+      : r.calc.umbral
       ? `<div class="table-wrap"><table><tbody>
       <tr><td>Ha facturado</td><td class="num">${money(r.calc.umbral.facturadoCents)}</td></tr>
       <tr><td>− Su parte de los gastos de esos días</td>
@@ -495,7 +567,10 @@ function settlementCard(r, { from, to, onlyPending, limites }) {
       </table></div>`
         : ''
     }
-    <div class="table-wrap">
+    ${
+      r.entries.length === 0
+        ? ''
+        : `<div class="table-wrap">
       <table>
         <thead><tr><th>Fecha</th><th>Cliente</th><th class="num">Importe</th></tr></thead>
         <tbody>
@@ -512,23 +587,30 @@ function settlementCard(r, { from, to, onlyPending, limites }) {
             .join('')}
         </tbody>
       </table>
-    </div>
+    </div>`
+    }
   </details>
 
   ${
-    onlyPending && r.count > 0
+    onlyPending && (r.count > 0 || (r.calc.beneficio && r.calc.beneficio.diasCount > 0))
       ? `<form method="post" action="/admin/liquidacion/cerrar" class="no-print" style="margin-top:12px">
       <input type="hidden" name="user_id" value="${r.user.id}">
       <input type="hidden" name="from" value="${esc(from)}">
       <input type="hidden" name="to" value="${esc(to)}">
       ${camposCorte(limites)}
-      <button class="btn big" type="submit" data-confirm="Vas a dar por pagados ${r.count} servicio(s) de ${esc(
-        r.user.name
-      )} por ${money(r.calc.commissionCents)}.
+      <button class="btn big" type="submit" data-confirm="${
+        r.calc.beneficio
+          ? `Vas a dar por pagados ${r.calc.beneficio.diasCount} día(s) de ${esc(r.user.name)} por ${money(
+              r.calc.commissionCents
+            )}.
 
-Su cuenta de este periodo quedará a cero y esos servicios ya no se podrán modificar. ¿Confirmas?">✓ Liquidado: ya le he pagado ${money(
-        r.calc.commissionCents
-      )}</button>
+Esos días ya no volverán a contar en su parte del beneficio. ¿Confirmas?`
+          : `Vas a dar por pagados ${r.count} servicio(s) de ${esc(r.user.name)} por ${money(
+              r.calc.commissionCents
+            )}.
+
+Su cuenta de este periodo quedará a cero y esos servicios ya no se podrán modificar. ¿Confirmas?`
+      }">✓ Liquidado: ya le he pagado ${money(r.calc.commissionCents)}</button>
       <p class="hint">Al pulsarlo, ${esc(r.user.name)} empieza de cero en este periodo.</p>
     </form>`
       : ''
@@ -695,7 +777,7 @@ function adminWorkerForm({ user, flash, warning, worker }) {
         <option value="percent" ${w.commission_type === 'percent' ? 'selected' : ''}>Un porcentaje de todo lo que factura</option>
         <option value="tiers" ${w.commission_type === 'tiers' ? 'selected' : ''}>Varios porcentajes por tramos</option>
         <option value="fixed" ${w.commission_type === 'fixed' ? 'selected' : ''}>Una cantidad fija por servicio</option>
-        <option value="profit" ${w.commission_type === 'profit' ? 'selected' : ''}>Repartir las ganancias (lo que queda después de gastos)</option>
+        <option value="profit" ${w.commission_type === 'profit' ? 'selected' : ''}>Un porcentaje del beneficio de la empresa (no cobra por clientes)</option>
       </select>
     </div>
 
@@ -745,27 +827,32 @@ function adminWorkerForm({ user, flash, warning, worker }) {
 
     <div data-when-type="profit">
       <div class="field">
-        <label for="profit_company_percent">De las ganancias, la empresa se lleva</label>
+        <label for="profit_company_percent">Del beneficio, la empresa se queda</label>
         <input id="profit_company_percent" name="profit_company_percent" inputmode="decimal"
                value="${esc(reparto.empresa)}" data-profit-input>
         <div class="hint">
-          La empresa se lleva el <strong data-profit-empresa>${esc(reparto.empresa)}</strong> %
-          y ${isNew ? 'el trabajador' : esc(w.name)}, el
+          La empresa se queda el <strong data-profit-empresa>${esc(reparto.empresa)}</strong> %
+          y ${isNew ? 'esta persona' : esc(w.name)}, el
           <strong data-profit-trabajador>${esc(reparto.trabajador)}</strong> %.
         </div>
       </div>
       <p class="hint">
-        Aquí no se comisiona sobre lo que factura, sino sobre lo que <strong>gana</strong>: primero
-        se le descuenta la parte de los gastos del día que le toca (según lo que haya facturado ese
-        día), y lo que queda se reparte. Los días que no llegan a cubrir gastos no dejan ganancia,
-        pero tampoco restan de los demás días.
+        No cobra por los clientes que hace (puede no hacer ninguno): cobra un porcentaje de lo que
+        le queda limpio <strong>al negocio entero</strong>. El beneficio es todo lo que factura el
+        equipo, más los otros ingresos de Caja, menos todos los gastos (con IVA) y menos lo que
+        cobran las trabajadoras.
       </p>
       <p class="hint">
-        Ejemplo: un día el equipo factura 500 € y el día cuesta 150 €. A quien haya traído la
-        mitad le quedan 175 € de ganancia, así que se lleva
-        <strong data-profit-ejemplo>${money(Math.round((17500 * reparto.trabajador) / 100))}</strong>.
+        Ejemplo: en un mes el equipo factura 10.000 €, hay 3.000 € de gastos y las trabajadoras
+        cobran 4.000 €. Quedan 3.000 € de beneficio, así que se lleva
+        <strong data-profit-ejemplo>${money(Math.round((300000 * reparto.trabajador) / 100))}</strong>.
       </p>
-      <p class="hint">La escalera de tramos por cubrir gastos no se le aplica: su trato ya va sobre ganancias.</p>
+      <p class="hint">
+        Los días malos <strong>restan</strong>: se suma el periodo entero, así que un día en
+        pérdidas se come parte de los buenos. Si el total sale negativo no cobra nada, pero tampoco
+        pone dinero. Y al liquidarle no se cierran servicios sino <strong>días</strong>: los que ya
+        le has pagado no se vuelven a contar.
+      </p>
     </div>
   </div>
 

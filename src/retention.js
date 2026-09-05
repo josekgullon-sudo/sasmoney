@@ -76,4 +76,20 @@ function forTotals(rule, totals) {
   };
 }
 
-module.exports = { POR_DEFECTO, getRetention, setRetention, forEntries, forTotals };
+/**
+ * La retención de quien cobra por días y no por servicios (el que se lleva un
+ * porcentaje del beneficio). Aquí lo que pesa es cada día: si el periodo cruza
+ * la fecha de arranque, se retiene la parte proporcional a los días que caen
+ * dentro.
+ */
+function forDays(dias) {
+  const retencion = getRetention();
+  if (retencion.percent <= 0 || dias.length === 0) return null;
+  return {
+    ...retencion,
+    baseTotal: dias.length,
+    baseAfectada: dias.filter((d) => d >= retencion.desde).length,
+  };
+}
+
+module.exports = { POR_DEFECTO, getRetention, setRetention, forEntries, forTotals, forDays };

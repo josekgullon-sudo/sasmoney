@@ -10,9 +10,9 @@
  *                 'total'       → se aplica a TODO el importe el % del tramo alcanzado.
  *                 'progressive' → cada tramo cobra su % sólo sobre la parte que le toca.
  *  - 'fixed'    → una cantidad fija por servicio realizado.
- *  - 'profit'   → se reparten las **ganancias**, no lo facturado: a lo que trae
- *                 se le quitan primero los gastos que le tocan de esos días, y
- *                 lo que queda se parte entre la empresa y el trabajador.
+ *  - 'profit'   → un porcentaje del **beneficio de toda la empresa**, no de lo
+ *                 que factura él. Esa cuenta va por periodos y no por servicios,
+ *                 así que la lleva profit.js; aquí sólo se le pone nombre.
  *
  * Todos los importes viajan en céntimos (enteros) para no arrastrar errores de coma flotante.
  */
@@ -20,12 +20,12 @@
 const COMMISSION_TYPES = ['percent', 'tiers', 'fixed', 'profit'];
 
 /**
- * El reparto de las ganancias, en porcentaje.
+ * El reparto del beneficio, en porcentaje.
  *
- * Se guarda lo que se lleva **la empresa** porque es como se habla de este trato
- * ("la empresa se lleva el 40 % de las ganancias"); lo del trabajador es el
- * resto. Las dos cifras se enseñan juntas en la ficha para que no haya duda de
- * cuál es cuál.
+ * Se guarda lo que se queda **la empresa** porque es como se habla de este trato
+ * ("la empresa se lleva el 60 % del beneficio"); lo del trabajador es el resto.
+ * Las dos cifras se enseñan juntas en la ficha para que no haya duda de cuál es
+ * cuál.
  */
 function profitShares(rule) {
   const empresa = Math.min(100, Math.max(0, Number(rule.profit_company_percent) || 0));
@@ -78,16 +78,15 @@ function calcCommission(rule, totals) {
   const breakdown = [];
 
   if (type === 'profit') {
-    // Repartir ganancias exige saber lo que costó cada día, y eso lo lleva
-    // threshold.js. Aquí sólo se llega con la ganancia ya calculada (o sin
-    // servicios que repartir, que es lo mismo que no haber ganado nada).
-    const { empresa, trabajador } = profitShares(rule);
-    const gananciaCents = Math.max(0, Math.round(Number(totals.gananciaCents) || 0));
-    commissionCents = Math.round((gananciaCents * trabajador) / 100);
-    label = `${fmtPercent(trabajador)} de las ganancias (la empresa, ${fmtPercent(empresa)})`;
+    // Su paga sale del beneficio del negocio entero y se calcula por periodos
+    // (profit.js), no servicio a servicio. Si se llega aquí es que se ha pedido
+    // la cuenta por la vía de los servicios: no se le paga nada por ellos.
+    const { trabajador } = profitShares(rule);
+    commissionCents = 0;
+    label = `${fmtPercent(trabajador)} del beneficio de la empresa`;
     breakdown.push({
-      concept: `${formatEuro(gananciaCents)} de ganancias × ${fmtPercent(trabajador)}`,
-      amountCents: commissionCents,
+      concept: 'Cobra del beneficio de la empresa, no por servicios',
+      amountCents: 0,
     });
   } else if (type === 'fixed') {
     const fixed = Math.max(0, Math.round(Number(rule.fixed_cents) || 0));
@@ -195,7 +194,7 @@ function ruleLabel(rule) {
   const type = rule.commission_type;
   if (type === 'profit') {
     const { empresa, trabajador } = profitShares(rule);
-    return `${fmtPercent(trabajador)} de las ganancias (la empresa se lleva ${fmtPercent(empresa)})`;
+    return `${fmtPercent(trabajador)} del beneficio de la empresa (la empresa se queda ${fmtPercent(empresa)})`;
   }
   if (type === 'fixed') return `${formatEuro(rule.fixed_cents)} por servicio`;
   if (type === 'tiers') {

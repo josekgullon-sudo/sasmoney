@@ -166,11 +166,11 @@ test('al cerrar con corte se guarda hasta dónde se liquidó de verdad', () => {
   assert.equal(guardada.period_to, DIA);
 });
 
-test('el trabajador que reparte ganancias cobra sobre lo que queda tras gastos', () => {
+test('el socio cobra un porcentaje del beneficio de toda la empresa', () => {
   db.exec('DELETE FROM entries; DELETE FROM settlements; DELETE FROM users; DELETE FROM expenses');
 
-  // Anita, al 50 % de lo que factura; Bea, que reparte ganancias con la empresa
-  // (60 % para la empresa, 40 % para ella).
+  // Anita, al 50 % de lo que factura; Bea, que no hace clientes y se lleva el
+  // 40 % del beneficio del negocio (la empresa se queda el 60 %).
   db.prepare(
     `INSERT INTO users (id, username, name, password_hash, role, commission_type, commission_percent)
      VALUES (1, 'anita', 'Anita', 'x', 'worker', 'percent', 50)`
@@ -180,42 +180,84 @@ test('el trabajador que reparte ganancias cobra sobre lo que queda tras gastos',
      VALUES (2, 'bea', 'Bea', 'x', 'worker', 'profit', 60)`
   ).run();
 
-  // El día cuesta 150 €.
+  // El día cuesta 150 € de publicidad y Anita factura 500 €.
   expenses.createExpense({
-    name: 'Publicidad',
-    amount_cents: 15000,
-    kind: 'daily',
-    anchor_date: DIA,
-    notes: '',
-    is_investment: 1,
+    name: 'Publicidad', amount_cents: 15000, kind: 'daily', anchor_date: DIA, notes: '', is_investment: 1,
   });
-
-  // Ese día el equipo factura 250 €: 150 € Anita y 100 € Bea.
-  const alta = db.prepare(
-    `INSERT INTO entries (user_id, service_date, service_time, amount_cents) VALUES (?, ?, '10:00', ?)`
-  );
-  alta.run(1, DIA, 15000);
-  alta.run(2, DIA, 10000);
+  db.prepare(
+    `INSERT INTO entries (user_id, service_date, service_time, amount_cents) VALUES (1, ?, '10:00', 50000)`
+  ).run(DIA);
 
   const bea = repo.getUser(2);
   const [fila] = repo.settlementRows({ from: DIA, to: DIA, userId: 2 });
 
-  // De los 100 € que trajo, le tocan 60 € de los gastos del día (100/250 de 150 €)
-  // y le quedan 40 € de ganancia: se lleva el 40 %, o sea 16 €.
-  assert.equal(fila.calc.umbral.facturadoCents, 10000);
-  assert.equal(fila.calc.umbral.gastosCents, 6000);
-  assert.equal(fila.calc.umbral.excesoCents, 4000);
-  assert.equal(fila.calc.commissionCents, 1600);
-  assert.equal(fila.calc.companyCents, 8400);
-  assert.match(fila.calc.label, /ganancias/);
+  // 500 € facturados − 150 € de gastos − 175 € de Anita = 175 € de beneficio.
+  // (Anita cobra el 50 % del exceso sobre gastos, que es como está puesto.)
+  // Bea se lleva el 40 % de esos 175 €: 70 €.
+  assert.equal(fila.count, 0); // no tiene servicios: cobra por días
+  assert.equal(fila.calc.beneficio.facturadoCents, 50000);
+  assert.equal(fila.calc.beneficio.gastosCents, 15000);
+  assert.equal(fila.calc.beneficio.pagadoCents, 17500);
+  assert.equal(fila.calc.beneficio.gananciaCents, 17500);
+  assert.equal(fila.calc.commissionCents, 7000);
+  assert.match(fila.calc.label, /beneficio/);
 
-  // Y no es el 40 % de lo facturado, que serían 40 €.
-  assert.notEqual(fila.calc.commissionCents, 4000);
+  // Su fila no suma facturación: lo que gana no sale de servicios suyos.
+  assert.equal(fila.totalCents, 0);
 
-  // Al cerrarla se paga eso mismo y sus servicios quedan liquidados.
+  // Al cerrar se guardan los DÍAS pagados, no servicios.
   const hecho = repo.closeSettlement({ worker: bea, from: DIA, to: DIA });
-  assert.equal(hecho.commissionCents, 1600);
-  assert.equal(repo.settlementRows({ from: DIA, to: DIA, userId: 2 }).length, 0);
+  assert.equal(hecho.commissionCents, 7000);
+  assert.equal(hecho.entryCount, 0);
+
+  const [guardada] = repo.listSettlements({ userId: 2 });
+  assert.equal(guardada.period_from, DIA);
+  assert.equal(guardada.period_to, DIA);
+  assert.equal(guardada.entry_count, 0);
+
+  // Y ese día ya no se vuelve a contar: no queda nada pendiente.
+  assert.equal(repo.diasPendientes(2, DIA, DIA).length, 0);
+  assert.equal(repo.beneficioFor(bea, { from: DIA, to: DIA, pendingOnly: true }).commissionCents, 0);
+  // Pero mirando el periodo sin filtrar sigue viéndose lo que dio ese día.
+  assert.equal(repo.beneficioFor(bea, { from: DIA, to: DIA }).commissionCents, 7000);
+
+  // Los servicios de Anita siguen pendientes: liquidar al socio no los toca.
+  assert.equal(repo.settlementRows({ from: DIA, to: DIA, userId: 1 })[0].count, 1);
+
+  db.exec('DELETE FROM expenses');
+});
+
+test('al socio los días malos le restan de los buenos', () => {
+  db.exec('DELETE FROM entries; DELETE FROM settlements; DELETE FROM users; DELETE FROM expenses');
+  db.prepare(
+    `INSERT INTO users (id, username, name, password_hash, role, commission_type, commission_percent)
+     VALUES (1, 'anita', 'Anita', 'x', 'worker', 'percent', 50)`
+  ).run();
+  db.prepare(
+    `INSERT INTO users (id, username, name, password_hash, role, commission_type, profit_company_percent)
+     VALUES (2, 'bea', 'Bea', 'x', 'worker', 'profit', 60)`
+  ).run();
+
+  // Dos días a 150 € de gastos. El 11 se factura 100 € (día malo) y el 12, 500 €.
+  expenses.createExpense({
+    name: 'Publicidad', amount_cents: 15000, kind: 'daily', anchor_date: '2026-08-11', notes: '', is_investment: 1,
+  });
+  const alta = db.prepare(
+    `INSERT INTO entries (user_id, service_date, service_time, amount_cents) VALUES (1, ?, '10:00', ?)`
+  );
+  alta.run('2026-08-11', 10000);
+  alta.run(DIA, 50000);
+
+  const bea = repo.getUser(2);
+  const calc = repo.beneficioFor(bea, { from: '2026-08-11', to: DIA });
+
+  // 600 € facturados − 300 € de gastos − 175 € de Anita = 125 € de beneficio.
+  assert.equal(calc.beneficio.gananciaCents, 12500);
+  assert.equal(calc.commissionCents, 5000);
+
+  // El día bueno solo deja 175 €: el día malo (100 € con 150 € de gastos) se
+  // ha comido 50 € de esos, que es justo lo que se quiere comprobar.
+  assert.equal(repo.beneficioFor(bea, { from: DIA, to: DIA }).beneficio.gananciaCents, 17500);
 
   db.exec('DELETE FROM expenses');
 });

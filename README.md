@@ -159,7 +159,7 @@ Cada trabajadora tiene su propia regla y la cambias cuando quieras:
 | **Un porcentaje** | Se lleva ese % de todo lo que factura | 40 % → factura 1.000 €, cobra 400 € |
 | **Varios porcentajes por tramos** | El % sube según lo que facture | 0 € → 30 %, 2.000 € → 35 %, 4.000 € → 40 % |
 | **Cantidad fija por servicio** | Cobra lo mismo por cada cliente | 15 € por cliente → 20 clientes, 300 € |
-| **Repartir las ganancias** | Se reparte lo que queda **después de gastos** | La empresa el 60 %, ella el 40 % |
+| **Un porcentaje del beneficio** | Cobra de lo que le queda limpio **a la empresa entera** | La empresa el 60 %, él el 40 % |
 
 En los tramos puedes elegir cómo se aplican:
 
@@ -170,26 +170,36 @@ En los tramos puedes elegir cómo se aplican:
 
 Puedes poner tantos tramos como quieras, no sólo tres.
 
-### Repartir las ganancias
+### Un porcentaje del beneficio de la empresa
 
-Es un trato distinto: no se comisiona sobre lo que factura, sino sobre lo que **gana**. Primero
-se le descuenta la parte que le toca de los gastos de esos días —repartidos igual que en el
-umbral, según lo que haya facturado cada uno ese día— y lo que queda se parte entre la empresa y
-ella. Tú pones lo que se lleva **la empresa** y debajo se ve al momento lo que le queda a ella.
+Para quien no hace clientes pero se lleva parte del negocio. No comisiona: cobra un porcentaje de
+lo que le queda **limpio a la empresa entera**.
 
-Un día con 150 € de gastos en el que el equipo factura 250 €, y ella trajo 100 €:
+```
+  lo que factura el equipo
++ los otros ingresos de la caja
+− todos los gastos (con su IVA, repartidos por días)
+− lo que cobran las trabajadoras
+─────────────────────────────────
+= beneficio, que se parte entre la empresa y él
+```
 
-| | |
-|---|---|
-| Ha facturado | 100,00 € |
-| Su parte de los gastos del día (100 € de 250 €) | −60,00 € |
-| **Ganancias que se reparten** | **40,00 €** |
-| La empresa se queda el 60 % | −24,00 € |
-| **Se lleva (antes de retención)** | **16,00 €** |
+Un mes en el que el equipo factura 10.000 €, hay 3.000 € de gastos y las trabajadoras cobran
+4.000 €: quedan 3.000 € de beneficio, la empresa se queda 1.800 € y él cobra 1.200 € (menos la
+retención, que también se le aplica).
 
-Los días que no llegan a cubrir gastos no dejan ganancia, pero **tampoco restan** de los demás
-días: cada día va por su cuenta, igual que en el umbral. La escalera de tramos no se le aplica,
-porque su trato ya va sobre ganancias. La retención sí, como a todos.
+Tres cosas propias de esta regla:
+
+- **Los días malos restan.** Aquí no se pone a cero el día que no cubre gastos como en el umbral:
+  se suma el periodo entero, porque eso es lo que gana de verdad el negocio. Si el total sale en
+  pérdidas no cobra nada, pero tampoco pone dinero.
+- **Los días que aún no han pasado no cuentan.** No han podido facturar, pero sus gastos fijos ya
+  están repartidos; contarlos daría pérdidas siempre. Se cuenta hasta hoy.
+- **Al liquidarle se cierran días, no servicios** (no tiene). Los días ya pagados no vuelven a
+  contar, así que puedes pagarle por semanas o por meses sin miedo a pagar dos veces lo mismo.
+
+En el Resumen sale en su propio apartado, *Reparto del beneficio*, y lo que se lleva ya está
+descontado de "Me queda".
 
 ---
 
@@ -358,8 +368,9 @@ Estructura:
 src/
   server.js          arranque, cookies, sesiones y seguridad básica
   db.js              esquema SQLite (node:sqlite) y creación del administrador
-  commission.js      el motor de cálculo (porcentaje, tramos, fijo, ganancias)
-  threshold.js       comisionar sólo por encima de los gastos del día, y repartir ganancias
+  commission.js      el motor de cálculo (porcentaje, tramos, fijo, beneficio)
+  threshold.js       comisionar sólo por encima de los gastos del día
+  profit.js          el que cobra un porcentaje del beneficio de la empresa
   repo.js            consultas: servicios, totales, liquidaciones
   util.js            fechas, zona horaria, marca y escapado de HTML
   period.js          qué trozo de tiempo se mira: un día, un mes o dos fechas

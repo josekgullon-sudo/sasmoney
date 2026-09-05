@@ -2,9 +2,14 @@
 
 const { db, transaction } = require('./db');
 const { calcCommission } = require('./commission');
+const { addDays, todayISO } = require('./util');
 const retention = require('./retention');
 const threshold = require('./threshold');
+const profit = require('./profit');
 const expenses = require('./expenses');
+
+/** ¿Cobra un porcentaje del beneficio de la empresa en vez de comisión? */
+const cobraDelBeneficio = (worker) => worker && worker.commission_type === 'profit';
 
 /**
  * Lo que ha facturado **todo el equipo** cada día del periodo.
@@ -48,15 +53,6 @@ function commissionForEntries(worker, entries) {
   const retencion = retention.forEntries(worker, entries);
   const umbral = threshold.getThreshold();
 
-  // Quien reparte ganancias necesita siempre la cuenta día a día, esté puesto o
-  // no el umbral: sin saber lo que costó el día no hay ganancia que repartir.
-  if (entries.length > 0 && worker.commission_type === 'profit') {
-    return threshold.calcSobreGanancias(worker, entries, {
-      ...porDia(entries),
-      retencion,
-    });
-  }
-
   if (umbral.activo && entries.length > 0 && worker.commission_type === 'percent') {
     return threshold.calcConUmbral(worker, entries, {
       tramos: umbral.tramos,
@@ -78,7 +74,88 @@ function commissionForEntries(worker, entries) {
  */
 function commissionFor({ userId, from, to, pendingOnly = false }) {
   const worker = getUser(userId);
+  if (cobraDelBeneficio(worker)) return beneficioFor(worker, { from, to, pendingOnly });
   return commissionForEntries(worker, listEntries({ userId, from, to, pendingOnly }));
+}
+
+/* --------------------------------------------- El reparto del beneficio
+ *
+ * Quien cobra un porcentaje del beneficio de la empresa no tiene servicios que
+ * liquidar, así que lo que marca lo ya pagado son los **días**: los que ya
+ * entraron en una liquidación suya no se vuelven a contar.
+ */
+
+/** Todos los días del periodo, del primero al último. */
+function listDays(from, to) {
+  const dias = [];
+  for (let d = from; d <= to; d = addDays(d, 1)) dias.push(d);
+  return dias;
+}
+
+/** Los días del periodo que este trabajador todavía no tiene liquidados. */
+function diasPendientes(userId, from, to) {
+  const cerradas = db
+    .prepare('SELECT period_from, period_to FROM settlements WHERE user_id = ?')
+    .all(userId);
+  return listDays(from, to).filter(
+    (d) => !cerradas.some((c) => d >= c.period_from && d <= c.period_to)
+  );
+}
+
+/** Suma de un Map(fecha → céntimos) sólo en los días que cuentan. */
+function sumaDias(mapa, dias) {
+  return dias.reduce((a, d) => a + (mapa.get(d) || 0), 0);
+}
+
+/**
+ * Lo que hay que pagarle a quien cobra del beneficio.
+ *
+ * El beneficio es de la empresa entera: lo que factura el equipo más los otros
+ * ingresos, menos todos los gastos y menos lo que cobran las trabajadoras. Se
+ * suma el periodo **entero**, sin poner a cero los días malos: un día en
+ * pérdidas resta de los buenos, porque eso es lo que gana de verdad el negocio.
+ */
+function beneficioFor(worker, { from, to, pendingOnly = false }) {
+  // Nunca se cuentan días que aún no han pasado: no han podido facturar nada,
+  // pero sus gastos fijos ya están repartidos, así que contarlos daría siempre
+  // pérdidas y el socio saldría a cero hasta fin de mes.
+  const tope = to > todayISO() ? todayISO() : to;
+  if (tope < from) return profit.calcReparto(worker, { dias: [], retencion: null });
+
+  const dias = pendingOnly ? diasPendientes(worker.id, from, tope) : listDays(from, tope);
+  if (dias.length === 0) {
+    return profit.calcReparto(worker, { dias: [], retencion: null });
+  }
+
+  const cuentan = new Set(dias);
+  const desde = dias[0];
+  const hasta = dias[dias.length - 1];
+
+  let facturadoCents = 0;
+  let pagadoCents = 0;
+
+  for (const otro of listWorkers({ includeInactive: true })) {
+    const suyos = listEntries({ userId: otro.id, from: desde, to: hasta }).filter((e) =>
+      cuentan.has(e.service_date)
+    );
+    if (suyos.length === 0) continue;
+
+    facturadoCents += suyos.reduce((a, e) => a + e.amount_cents, 0);
+    // Los demás socios cobran del mismo beneficio, así que no son un coste que
+    // descontar antes de calcularlo: cada uno se lleva su parte de lo mismo.
+    if (!cobraDelBeneficio(otro)) {
+      pagadoCents += commissionForEntries(otro, suyos).commissionCents;
+    }
+  }
+
+  return profit.calcReparto(worker, {
+    facturadoCents,
+    ingresosCents: sumaDias(expenses.costByDay(desde, hasta, 'in'), dias),
+    gastosCents: sumaDias(expenses.costByDay(desde, hasta, 'out'), dias),
+    pagadoCents,
+    dias,
+    retencion: retention.forDays(dias),
+  });
 }
 
 /**
@@ -318,6 +395,24 @@ function settlementRows({
   const conLimites = hasta.to !== to || Boolean(hasta.toTime) || maxCents !== null;
 
   for (const worker of workers) {
+    // Quien cobra del beneficio no tiene servicios: su fila va por días, y el
+    // corte de la hora no le afecta (el beneficio se cuenta por días enteros).
+    if (cobraDelBeneficio(worker)) {
+      const calc = beneficioFor(worker, { from, to: hasta.to, pendingOnly });
+      if (calc.commissionCents === 0 && !includeEmpty && calc.beneficio.diasCount === 0) continue;
+      rows.push({
+        user: worker,
+        entries: [],
+        count: 0,
+        // Su facturación es cero: lo que gana no sale de servicios suyos, así
+        // que no puede sumar al total facturado del periodo.
+        totalCents: 0,
+        calc,
+        fueraCount: 0,
+      });
+      continue;
+    }
+
     const todos = listEntries({
       userId: worker.id,
       from,
@@ -353,6 +448,8 @@ function settlementRows({
 /** Cierra la liquidación de un trabajador: guarda el resumen y marca sus servicios como pagados. */
 const closeSettlement = transaction(({ worker, from, to, corte = null, maxCents = null, note = '' }) => {
   const hasta = aplicaCorte({ from, to, corte });
+
+  if (cobraDelBeneficio(worker)) return cierraBeneficio({ worker, from, to: hasta.to, note });
 
   // Se cuenta lo pendiente ANTES de marcar nada: después ya estaría cerrado y
   // saldría que no queda nada fuera.
@@ -414,6 +511,51 @@ const closeSettlement = transaction(({ worker, from, to, corte = null, maxCents 
   };
 });
 
+/**
+ * Cierra la liquidación de quien cobra del beneficio.
+ *
+ * No hay servicios que marcar: lo que se guarda son los **días** que se pagan,
+ * y son esos días los que no se vuelven a contar. Se guardan del primero al
+ * último de los que quedaban pendientes; si por medio hubiera algún día ya
+ * pagado, no pasa nada: ya estaba cubierto por su liquidación de entonces.
+ */
+function cierraBeneficio({ worker, from, to, note }) {
+  const calc = beneficioFor(worker, { from, to, pendingOnly: true });
+  const { dias, gananciaCents } = calc.beneficio;
+  if (dias.length === 0) return null;
+
+  const info = db
+    .prepare(
+      `INSERT INTO settlements (user_id, period_from, period_to, entry_count, total_cents, commission_cents, rule_snapshot, note)
+       VALUES (?, ?, ?, 0, ?, ?, ?, ?)`
+    )
+    .run(
+      worker.id,
+      dias[0],
+      dias[dias.length - 1],
+      gananciaCents,
+      calc.commissionCents,
+      JSON.stringify({
+        commission_type: worker.commission_type,
+        profit_company_percent: worker.profit_company_percent,
+        label: calc.label,
+        breakdown: calc.breakdown,
+        beneficio: { ...calc.beneficio, dias: undefined, diasCount: dias.length },
+        retention: retention.getRetention(),
+        retention_cents: calc.retentionCents,
+      }),
+      note
+    );
+
+  return {
+    settlementId: Number(info.lastInsertRowid),
+    entryCount: 0,
+    diasCount: dias.length,
+    commissionCents: calc.commissionCents,
+    fueraCount: 0,
+  };
+}
+
 function listSettlements({ userId = null, limit = 50 } = {}) {
   // Sólo se pasan los parámetros que la consulta usa de verdad.
   const params = userId ? { userId, limit } : { limit };
@@ -428,8 +570,11 @@ function listSettlements({ userId = null, limit = 50 } = {}) {
 }
 
 module.exports = {
+  cobraDelBeneficio,
   commissionForEntries,
   commissionFor,
+  beneficioFor,
+  diasPendientes,
   teamBillingByDay,
   listEntries,
   getEntry,
