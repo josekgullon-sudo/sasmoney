@@ -43,6 +43,9 @@ Cinco pantallas, cada una con una pregunta clara:
   la publicidad con el porcentaje que pongas a cada uno, y el resto de gastos a partes
   iguales. Los gastos diarios tienen **un calendario del mes** para apuntar lo que se gastó
   de verdad cada día.
+- **Analíticas** — *¿por dónde va el negocio?* Las cifras del periodo con **cuánto han subido o
+  bajado** respecto a otro trozo de tiempo, y el reparto por trabajador, por pueblo, por forma de
+  pago, por importe y por hora. Ver abajo.
 - **Servicios** — todos los cobros, con filtros y descarga en CSV.
 - **Trabajadores** — altas, contraseñas, cuánto se lleva cada una, la retención y el umbral de
   gastos.
@@ -67,7 +70,9 @@ más dejan elegir entre **Todo el mes** y **Sólo hasta hoy**.
 ## Las gráficas
 
 En el Resumen, debajo de las cifras, hay dos gráficas para ver de un vistazo **cuáles son los
-mejores días**:
+mejores días**. Cada barra responde: al pasarle el ratón se ilumina y sale un cartelito con el
+detalle del día; en el móvil, donde no hay ratón, el cartelito sale al tocarla. Cada barra es un
+botón de verdad, así que también se llega con el tabulador y lo lee un lector de pantalla.
 
 - **Día a día**: una barra por día con lo que facturó todo el equipo. La rayita naranja es lo que
   costó ese día; si la barra no llega, el día no cubrió gastos y se pinta en rojo. El mejor día
@@ -79,6 +84,22 @@ Si estás mirando **un solo día**, en lugar de esas dos sale **hora a hora**, c
 
 Las barras son HTML normal, no un dibujo ni una librería: los números son texto de verdad, se
 leen bien en cualquier móvil y la página no engorda nada.
+
+## Analíticas
+
+Una pantalla entera de números, con **comparación** contra otro trozo de tiempo: el periodo
+anterior, el mes pasado, el año pasado o dos fechas que elijas. Cada cifra lleva debajo cuánto ha
+subido o bajado, en verde o en rojo según convenga (en los gastos, subir es rojo).
+
+- **Lo que ha pasado**: facturado, servicios, ticket medio, por día, días con trabajo.
+- **Lo que deja**: gastos, comisiones, beneficio y margen, cuánto vuelve por cada euro de
+  marketing y cuánto cuesta traer un cliente.
+- **Día a día**, **por día de la semana** y **por hora del día**. En las dos últimas, comparando,
+  cada columna lleva dos barras: el periodo y con el que comparas.
+- **Repartos**: por trabajador, por pueblo, por forma de pago y por tramo de importe, cada uno con
+  su porcentaje del total.
+- **Clientes que repiten**, de los que tienen nombre apuntado.
+- **Los últimos doce meses**, que no depende del periodo: es la foto larga.
 
 ## La retención
 

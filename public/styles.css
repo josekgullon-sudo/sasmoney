@@ -356,10 +356,50 @@ details.box > *:not(summary) { margin-top: 10px; }
   .lluvia { display: none; }
 }
 
+/* ---------- Analíticas: cifras con su comparación ---------- */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.kpi {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 11px 13px;
+  background: var(--bg);
+}
+.kpi .k { font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); }
+.kpi .v { font-size: clamp(1.05rem, 2vw, 1.35rem); font-weight: 700; margin-top: 3px; white-space: nowrap; }
+.kpi .d { margin-top: 2px; font-size: .78rem; line-height: 1.5; }
+.kpi .d:empty { display: none; }
+
+/* Sube o baja, y si eso es bueno o malo (en los gastos, subir es malo). */
+.delta { font-weight: 600; white-space: nowrap; }
+.delta.bien { color: var(--ok); }
+.delta.mal { color: var(--danger); }
+.delta.igual { color: var(--ink-soft); }
+
+/* La barrita de "cuánto de esto es del total", dentro de una tabla. */
+.barrita {
+  display: inline-block;
+  width: 42px; height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+.barrita i { display: block; height: 100%; background: var(--brand); opacity: .75; }
+
 /* ---------- Gráficas ----------
    Barras de HTML, sin dibujos ni librerías: los números son texto de verdad y
-   se leen igual en un móvil pequeño que en un ordenador. */
-.grafica { margin: 6px 0 2px; }
+   se leen igual en un móvil pequeño que en un ordenador. Cada barra es un
+   botón, para que en el móvil —donde no hay ratón— el cartelito salga al
+   tocarla y para que se pueda llegar con el tabulador. */
+.grafica { margin: 8px 0 2px; }
+.grafica .tope {
+  border-top: 1px dashed var(--line);
+  text-align: right;
+  font-size: .68rem;
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
 .grafica .cols {
   display: flex;
   align-items: flex-end;
@@ -377,25 +417,52 @@ details.box > *:not(summary) { margin-top: 10px; }
   flex-direction: column;
   justify-content: flex-end;
   position: relative;
+  /* Es un <button>: hay que quitarle todo lo de botón. */
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 .grafica .barra {
   position: relative;
   height: 100%;
   display: flex;
   align-items: flex-end;
+  gap: 2px;
   background: var(--bg);
   border-radius: 4px 4px 0 0;
+  transition: background .12s ease;
 }
 .grafica .relleno {
-  width: 100%;
+  flex: 1 1 0;
   min-height: 2px;
   background: var(--brand);
   border-radius: 4px 4px 0 0;
   opacity: .85;
+  transition: background .12s ease, opacity .12s ease;
 }
 /* El día que no cubre gastos se ve de otro color: no hace falta leer nada. */
 .grafica .relleno.flojo { background: var(--danger); opacity: .55; }
 .grafica .relleno.top { background: var(--brand-dark); opacity: 1; }
+/* La barra del periodo con el que se compara, al lado y más apagada. */
+.grafica .relleno.cmp { background: var(--ink-soft); opacity: .35; }
+
+/* Al pasar por encima (o al tocar) se ilumina la columna entera. */
+.grafica .col:hover .barra,
+.grafica .col:focus-visible .barra { background: var(--brand-soft); }
+.grafica .col:hover .relleno,
+.grafica .col:focus-visible .relleno { opacity: 1; background: var(--brand-dark); }
+.grafica .col:hover .relleno.flojo,
+.grafica .col:focus-visible .relleno.flojo { background: var(--danger); opacity: .85; }
+.grafica .col:hover .relleno.cmp,
+.grafica .col:focus-visible .relleno.cmp { background: var(--ink-soft); opacity: .55; }
+.grafica .col:focus { outline: none; }
+.grafica .col:focus-visible .barra { box-shadow: 0 0 0 2px var(--brand); }
+
 /* La rayita de lo que costó el día. */
 .grafica .coste {
   position: absolute;
@@ -417,6 +484,37 @@ details.box > *:not(summary) { margin-top: 10px; }
      etiqueta unas cuantas barras, así que no se pisan entre ellas. */
   overflow: visible;
 }
+
+/* ---------- El cartelito de cada barra ---------- */
+.grafica .tip {
+  position: absolute;
+  bottom: calc(100% - 14px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  min-width: 150px;
+  padding: 8px 10px;
+  background: var(--ink);
+  color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(16, 32, 48, .25);
+  font-size: .78rem;
+  line-height: 1.45;
+  text-align: left;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;   /* el cartelito nunca se come el toque de la barra */
+  transition: opacity .12s ease;
+}
+.grafica .col.tip-izq .tip { left: 0; transform: none; }
+.grafica .col.tip-der .tip { left: auto; right: 0; transform: none; }
+.grafica .col:hover .tip,
+.grafica .col:focus .tip { opacity: 1; visibility: visible; }
+.grafica .tip strong { display: block; margin-bottom: 3px; }
+.grafica .tip .l { display: flex; justify-content: space-between; gap: 14px; opacity: .85; }
+.grafica .tip .l b { font-weight: 600; opacity: 1; }
+
 .grafica-nota { margin: 10px 0 0; font-size: .9rem; }
 .grafica-leyenda {
   margin: 8px 0 0;
@@ -435,6 +533,7 @@ details.box > *:not(summary) { margin-top: 10px; }
 }
 .grafica-leyenda .mu.bien { background: var(--brand); opacity: .85; }
 .grafica-leyenda .mu.flojo { background: var(--danger); opacity: .55; }
+.grafica-leyenda .mu.cmp { background: var(--ink-soft); opacity: .35; }
 .grafica-leyenda .mu.linea {
   height: 0; border-radius: 0;
   border-top: 2px dashed var(--warn);
@@ -452,6 +551,7 @@ details.box > *:not(summary) { margin-top: 10px; }
   /* En el móvil no cabe todo: se esconde lo accesorio antes que recortar cifras. */
   .hide-narrow { display: none; }
   .wide-only { display: none; }
+  .barrita { display: none; }
   /* Dos botones seguidos no caben en la última columna: se ponen uno debajo del otro. */
   td.acciones { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
 }

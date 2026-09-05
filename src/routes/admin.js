@@ -6,14 +6,16 @@ const { requireAdmin, hashPassword, destroyUserSessions } = require('../auth');
 const repo = require('../repo');
 const { parseAmountToCents, formatEuro, fmtPercent, COMMISSION_TYPES } = require('../commission');
 const { todayISO, nowHM, isValidTime, isValidDate, formatDate, monthRange, monthLabel } = require('../util');
-const { resolvePeriod, periodQuery, readVista, validMonth } = require('../period');
+const { resolvePeriod, periodQuery, readVista, validMonth, resolveComparacion } = require('../period');
 const expenses = require('../expenses');
 const investment = require('../investment');
+const analytics = require('../analytics');
 const retention = require('../retention');
 const threshold = require('../threshold');
 const cajaViews = require('../views/caja');
 const calendarioViews = require('../views/calendario');
 const views = require('../views/admin');
+const analiticasViews = require('../views/analiticas');
 const { PAYMENT_METHODS, metodoLegible } = require('../views/worker');
 
 const router = express.Router();
@@ -123,7 +125,103 @@ router.get('/', (req, res) => {
       },
       ingresos: { ...ingresosMes, cents: ingresosCents },
       diasGrafica,
+      semanaGrafica: periodo.corte ? analytics.porDiaSemana({ from, to: topeGrafica }) : [],
       horasGrafica: periodo.esUnDia && periodo.corte ? repo.teamBillingByHour(from) : [],
+    })
+  );
+});
+
+/* ---------------------------------------------------------------- Analíticas */
+
+/**
+ * Todo lo que se puede saber de un trozo de tiempo. Se llama dos veces —una
+ * para el periodo y otra para el comparado— para que las dos columnas de
+ * números salgan exactamente de la misma cuenta.
+ */
+function analiticasDe({ from, to }) {
+  const costePorDia = expenses.costByDay(from, to);
+  return {
+    resumen: analytics.resumen({ from, to }),
+    dias: analytics.porDia({ from, to }).map((d) => ({
+      fecha: d.fecha,
+      facturadoCents: d.cents,
+      count: d.count,
+      costeCents: costePorDia.get(d.fecha) || 0,
+    })),
+    semana: analytics.porDiaSemana({ from, to }),
+    horas: analytics.porHora({ from, to }),
+    trabajadores: analytics.porTrabajador({ from, to }),
+    pueblos: analytics.porPueblo({ from, to }),
+    metodos: analytics.porMetodo({ from, to }),
+    importes: analytics.porImporte({ from, to }),
+    clientes: analytics.clientesQueRepiten({ from, to }),
+  };
+}
+
+/**
+ * Lo que deja el negocio en un periodo.
+ *
+ * Las comisiones se piden a repo, que es quien sabe de reglas, umbrales y
+ * retenciones: recalcularlas aquí por otro camino es la mejor manera de que
+ * dos pantallas enseñen dos cifras distintas de lo mismo.
+ */
+function dineroDe({ from, to }) {
+  const filas = repo.settlementRows({ from, to, pendingOnly: false, includeEmpty: true });
+  const comisionesCents = filas.reduce((a, r) => a + r.calc.commissionCents, 0);
+  const facturadoCents = filas.reduce((a, r) => a + r.totalCents, 0);
+
+  const gastos = expenses.rangeSummary({ from, to, direction: 'out' });
+  const ingresos = expenses.rangeSummary({ from, to, direction: 'in' });
+  const gastosCents = gastos.totalCents;
+  const marketingCents = gastos.inversion.totalCents;
+  const beneficioCents = facturadoCents + ingresos.totalCents - gastosCents - comisionesCents;
+  const servicios = filas.reduce((a, r) => a + r.count, 0);
+
+  return {
+    facturadoCents,
+    comisionesCents,
+    gastosCents,
+    marketingCents,
+    ingresosCents: ingresos.totalCents,
+    beneficioCents,
+    margen: facturadoCents > 0 ? (beneficioCents / facturadoCents) * 100 : 0,
+    // Cuánto vuelve por cada euro de publicidad, y cuánto cuesta traer a uno.
+    roas: marketingCents > 0 ? facturadoCents / marketingCents : 0,
+    costePorServicioCents: servicios > 0 ? Math.round(marketingCents / servicios) : 0,
+  };
+}
+
+router.get('/analiticas', (req, res) => {
+  const periodo = resolvePeriod(req.query);
+  const comparacion = resolveComparacion(req.query, periodo);
+
+  const datos = analiticasDe(periodo);
+  const dinero = dineroDe(periodo);
+
+  // Del periodo comparado sólo hace falta lo que se enseña al lado: las cifras
+  // de arriba y las gráficas de categorías fijas (días de la semana y horas).
+  let antes = null;
+  if (comparacion) {
+    const otros = analiticasDe(comparacion);
+    antes = {
+      ...otros.resumen,
+      ...dineroDe(comparacion),
+      semana: otros.semana,
+      horas: otros.horas,
+    };
+  }
+
+  res.send(
+    analiticasViews.adminAnalytics({
+      user: req.user,
+      flash: res.locals.flash,
+      warning: res.locals.warning,
+      periodo,
+      comparacion,
+      datos,
+      antes,
+      dinero,
+      meses: analytics.ultimosMeses(todayISO(), 12),
     })
   );
 });

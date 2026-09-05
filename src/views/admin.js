@@ -48,9 +48,9 @@ function camposPeriodo(periodo) {
  * único que tiene sentido mirar ahí; con varios, el día a día y —si hay semana
  * suficiente— la media por día de la semana.
  */
-function graficasCard({ periodo, diasGrafica, horasGrafica }) {
+function graficasCard({ periodo, diasGrafica, semanaGrafica, horasGrafica }) {
   const dia = periodo.esUnDia ? graficas.porHora(horasGrafica) : graficas.porDia(diasGrafica);
-  const semana = periodo.esUnDia ? '' : graficas.porDiaSemana(diasGrafica);
+  const semana = periodo.esUnDia || periodo.dias < 7 ? '' : graficas.porDiaSemana(semanaGrafica);
   if (!dia && !semana) return '';
 
   return `<div class="card" style="margin-top:16px">
@@ -73,7 +73,7 @@ function graficasCard({ periodo, diasGrafica, horasGrafica }) {
 function adminHome({
   user, flash, warning, periodo, vista, rows, totals, pendingTotalCents,
   gastos, ingresos, inversion, inversionSinAsignarCents, otrosGastos, trabajadoresActivos,
-  socios = [], sociosCents = 0, diasGrafica = [], horasGrafica = [],
+  socios = [], sociosCents = 0, diasGrafica = [], semanaGrafica = [], horasGrafica = [],
 }) {
   const { corte, enCurso } = periodo;
   const q = periodQuery(periodo, { vista });
@@ -113,7 +113,7 @@ ${stats([
   { k: 'Me queda', v: money(quedaCents), sub: 'para la empresa', accent: true },
 ])}
 
-${graficasCard({ periodo, diasGrafica, horasGrafica })}
+${graficasCard({ periodo, diasGrafica, semanaGrafica, horasGrafica })}
 
 <div class="card" style="margin-top:16px">
   <h2>Cada trabajador</h2>
