@@ -164,12 +164,24 @@ La cuenta va **día a día**:
    Si sale negativo, ese día no comisiona nadie.
 2. El exceso se reparte entre los trabajadores **según lo que ha facturado cada uno ese día**.
    El umbral se cubre entre todos, así que el exceso también se reparte entre todos.
-3. A la parte de cada uno se le aplica **su porcentaje de siempre más los puntos del tramo**
-   que alcance con esa parte.
+3. A la parte de cada uno se le aplica **su porcentaje de siempre más los puntos de cada tramo**,
+   y cada tramo cuenta **sólo sobre su trozo**.
 
 La escalera va **en puntos**, no en porcentajes cerrados: así cada trabajadora conserva su base.
-Con *desde 500 € → +10*, una que va al 40 % pasa al 50 % y otra que va al 35 % pasa al 45 %. El
-tramo alcanzado se aplica a **todo** el exceso de ese día, no sólo a la parte que asoma.
+Con *desde 500 € → +10*, una que va al 40 % cobra esa parte al 50 % y otra que va al 35 %, al 45 %.
+
+Y la subida es **escalonada**: cada tramo cobra su porcentaje **sólo sobre su parte**, no sobre
+todo el exceso. Con la escalera *0 € → +0* y *200 € → +5*, una al 40 % que genere 300 € por encima
+de gastos cobra:
+
+```
+  los primeros 200 €  × 40 %  =   80,00 €
+  los otros     100 €  × 45 % =   45,00 €
+                                ──────────
+                                 125,00 €
+```
+
+y no 300 € × 45 % = 135 €. Así generar un euro más nunca sube el porcentaje de todo lo anterior.
 
 Hay una **escalera general**, que se pone en la pantalla de Trabajadores y vale para todo el
 mundo, y cada trabajadora puede tener **la suya propia**: en su ficha, dentro de *¿Cuánto se
@@ -184,8 +196,10 @@ Un día con 150 € de gastos, el equipo factura 900 € (Anita 750 €, Milu 15
 |---|---|---|
 | Ha facturado | 750,00 € | 150,00 € |
 | Su parte del exceso (750 € entre los dos) | 625,00 € | 125,00 € |
-| Tramo que alcanza | +10 → **50 %** | +0 → **35 %** |
-| **Se lleva** | **312,50 €** | **43,75 €** |
+| Los primeros 200 € | 200 € × 40 % = 80,00 € | 125 € × 35 % = 43,75 € |
+| De 200 € a 500 € (+5 → 45 %) | 300 € × 45 % = 135,00 € | — |
+| De 500 € en adelante (+10 → 50 %) | 125 € × 50 % = 62,50 € | — |
+| **Se lleva** | **277,50 €** | **43,75 €** |
 
 En la liquidación sale el desglose y una tabla **día a día** con lo que facturó el equipo, lo
 que costó el día, la parte de cada uno y el porcentaje que le tocó, para poder comprobarlo.

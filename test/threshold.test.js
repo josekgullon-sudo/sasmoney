@@ -82,22 +82,44 @@ test('los tramos suman puntos al porcentaje de cada uno', () => {
 
   // 250 € facturados → 100 € de exceso → primer tramo, su 40 % de siempre.
   assert.equal(conExceso(25000).commissionCents, 4000);
-  // 400 € → 250 € de exceso → +5 puntos → 45 %.
-  assert.equal(conExceso(40000).commissionCents, Math.round(25000 * 0.45));
-  // 800 € → 650 € de exceso → +10 puntos → 50 %.
-  assert.equal(conExceso(80000).commissionCents, Math.round(65000 * 0.5));
+  // 400 € → 250 € de exceso: 200 € al 40 % y los otros 50 € al 45 %.
+  assert.equal(conExceso(40000).commissionCents, 8000 + Math.round(5000 * 0.45));
+  // 800 € → 650 € de exceso: 200 € al 40 %, 300 € al 45 % y 150 € al 50 %.
+  assert.equal(
+    conExceso(80000).commissionCents,
+    8000 + Math.round(30000 * 0.45) + Math.round(15000 * 0.5)
+  );
 
   // Y a Milu, con la misma escalera, le suben desde su 35 %.
   const deMilu = calcConUmbral(milu, [servicio(40000)], { tramos, ...dia(40000, 15000) });
-  assert.equal(deMilu.commissionCents, Math.round(25000 * 0.4)); // 35 + 5
+  assert.equal(deMilu.commissionCents, Math.round(20000 * 0.35) + Math.round(5000 * 0.4));
 });
 
-test('el tramo alcanzado se aplica a todo el exceso del día, no sólo a la punta', () => {
+test('cada tramo cobra sólo sobre su parte, no sobre todo el exceso', () => {
   const tramos = normalizaTramos([{ min_cents: 0, puntos: 0 }, { min_cents: 20000, puntos: 5 }]);
-  // 350 € facturados, 150 € de gastos → 200 € de exceso, justo el tramo.
-  const calc = calcConUmbral(anita, [servicio(35000)], { tramos, ...dia(35000, 15000) });
-  // 45 % de los 200 €, no 40 % de 200 € + 5 % de 0.
-  assert.equal(calc.commissionCents, 9000);
+  // 450 € facturados, 150 € de gastos → 300 € de exceso.
+  const calc = calcConUmbral(anita, [servicio(45000)], { tramos, ...dia(45000, 15000) });
+
+  // 200 € × 40 % + 100 € × 45 % = 125 €. Y NO 300 € × 45 % = 135 €.
+  assert.equal(calc.commissionCents, 12500);
+  assert.notEqual(calc.commissionCents, 13500);
+
+  // El desglose lo cuenta tramo a tramo.
+  assert.equal(calc.breakdown.length, 2);
+  assert.match(calc.breakdown[1].concept, /a partir de 200,00 €/);
+  assert.equal(calc.breakdown.reduce((a, b) => a + b.amountCents, 0), 12500);
+});
+
+test('justo en el tramo no hay salto: un euro más no sube todo lo anterior', () => {
+  const tramos = normalizaTramos([{ min_cents: 0, puntos: 0 }, { min_cents: 20000, puntos: 5 }]);
+  const con = (facturado) =>
+    calcConUmbral(anita, [servicio(facturado)], { tramos, ...dia(facturado, 15000) })
+      .commissionCents;
+
+  // Con 200 € de exceso justos, su 40 % de siempre.
+  assert.equal(con(35000), 8000);
+  // Un euro más de exceso sólo añade ese euro al 45 %, no cambia lo de antes.
+  assert.equal(con(35100), 8000 + Math.round(100 * 0.45));
 });
 
 test('cada día va por su cuenta: uno malo no arrastra al bueno', () => {
@@ -181,5 +203,6 @@ test('con escalera propia comisiona distinto que sus compañeras', () => {
   });
 
   assert.equal(normal.commissionCents, 8000); // 40 % de 200 €
-  assert.equal(premiada.commissionCents, 10000); // 50 % de 200 €: su tramo propio
+  // Su tramo propio arranca en 150 €: 150 € al 40 % y los otros 50 € al 50 %.
+  assert.equal(premiada.commissionCents, 6000 + 2500);
 });

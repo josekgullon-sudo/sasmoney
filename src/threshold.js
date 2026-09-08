@@ -17,12 +17,18 @@ const { calcRetention, retentionLabel, formatEuro, fmtPercent } = require('./com
  *   2. El exceso se reparte entre los trabajadores según lo que haya facturado
  *      cada uno ese día. El umbral es de todos, así que el exceso también.
  *   3. A la parte de cada uno se le aplica su porcentaje de siempre **más** los
- *      puntos del tramo que alcance con esa parte.
+ *      puntos de cada tramo, y cada tramo cuenta sólo sobre su trozo.
  *
- * La escalera de tramos es una sola para todos y va en puntos, no en
- * porcentajes cerrados: así cada trabajador conserva su base (una al 40 %, otra
- * al 35 %) y el tramo sube a los dos por igual. El tramo alcanzado se aplica a
- * todo el exceso de ese día, no sólo a la parte que asoma por encima.
+ * La escalera va en puntos, no en porcentajes cerrados: así cada trabajador
+ * conserva su base (una al 40 %, otra al 35 %) y el tramo sube a los dos por
+ * igual. Hay una escalera general y cada trabajador puede tener la suya.
+ *
+ * Y la subida es **escalonada**: cada tramo cobra su porcentaje sólo sobre la
+ * parte que le toca, no sobre todo el exceso. Con 0 € → +0 y 200 € → +5, y un
+ * exceso de 300 €, los primeros 200 € van a su porcentaje de siempre y sólo los
+ * 100 € que pasan de ahí cobran los cinco puntos de más. Es como funciona un
+ * sueldo por tramos de toda la vida, y evita el escalón absurdo de que ganar un
+ * euro más suba la comisión de todo lo anterior.
  */
 
 const POR_DEFECTO = {
@@ -100,13 +106,49 @@ function setThreshold({ activo, tramos }) {
   setSetting('umbral_tramos', JSON.stringify(normalizaTramos(tramos)));
 }
 
-/** Los puntos que se suman con un exceso dado. */
+/** Los puntos que se suman en el tramo donde cae un exceso dado. */
 function puntosDe(tramos, excesoCents) {
   let puntos = 0;
   for (const t of tramos) {
     if (excesoCents >= t.min_cents) puntos = t.puntos;
   }
   return puntos;
+}
+
+/**
+ * La comisión de un exceso, tramo a tramo.
+ *
+ * Cada tramo cobra su porcentaje **sólo sobre su parte**. Con la escalera
+ * 0 € → +0 y 200 € → +5, un trabajador al 40 % y 300 € de exceso:
+ *
+ *   los primeros 200 €  × 40 %  =  80,00 €
+ *   los otros 100 €     × 45 %  =  45,00 €
+ *                                 ─────────
+ *                                 125,00 €
+ *
+ * y no 300 € × 45 %, que serían 135 € y haría que ganar un euro de más subiera
+ * el porcentaje de todo lo anterior.
+ *
+ * @returns {{cents:number, partes:Array}} lo que se lleva y el detalle por tramo.
+ */
+function comisionEscalonada(tramos, base, excesoCents) {
+  let cents = 0;
+  const partes = [];
+
+  for (let i = 0; i < tramos.length; i++) {
+    const desde = tramos[i].min_cents;
+    if (excesoCents <= desde) break;
+
+    const hasta = i + 1 < tramos.length ? tramos[i + 1].min_cents : Infinity;
+    const porcionCents = Math.min(excesoCents, hasta) - desde;
+    const percent = base + tramos[i].puntos;
+    const parteCents = Math.round((porcionCents * percent) / 100);
+
+    cents += parteCents;
+    partes.push({ desde, hasta, porcionCents, percent, puntos: tramos[i].puntos, cents: parteCents });
+  }
+
+  return { cents, partes };
 }
 
 /**
@@ -160,32 +202,51 @@ function calcConUmbral(worker, entries, { tramos, equipoPorDia, costePorDia, ret
 
   for (const dia of repartoPorDia(entries, equipoPorDia, costePorDia)) {
     const { fecha, mio, equipo, coste, miExceso, miCoste } = dia;
-    const puntos = puntosDe(tramos, miExceso);
-    const percent = base + puntos;
-    const comision = Math.round((miExceso * percent) / 100);
+    const { cents: comision, partes } = comisionEscalonada(tramos, base, miExceso);
 
     facturadoCents += mio;
     gastosCents += miCoste;
     excesoCents += miExceso;
     comisionCents += comision;
 
-    if (comision > 0) {
-      const clave = percent;
-      const acumulado = porTramo.get(clave) || { excesoCents: 0, comisionCents: 0, puntos };
-      acumulado.excesoCents += miExceso;
-      acumulado.comisionCents += comision;
-      porTramo.set(clave, acumulado);
+    // El desglose junta los mismos tramos de todos los días: al liquidar un mes
+    // interesa "tanto al 40 % y tanto al 45 %", no treinta líneas iguales.
+    for (const parte of partes) {
+      const acumulado = porTramo.get(parte.desde) || {
+        desde: parte.desde,
+        percent: parte.percent,
+        puntos: parte.puntos,
+        excesoCents: 0,
+        comisionCents: 0,
+      };
+      acumulado.excesoCents += parte.porcionCents;
+      acumulado.comisionCents += parte.cents;
+      porTramo.set(parte.desde, acumulado);
     }
 
-    dias.push({ fecha, equipoCents: equipo, costeCents: coste, mioCents: mio, miExcesoCents: miExceso, percent, comisionCents: comision });
+    dias.push({
+      fecha,
+      equipoCents: equipo,
+      costeCents: coste,
+      mioCents: mio,
+      miExcesoCents: miExceso,
+      // Con varios tramos en un mismo día no hay "un" porcentaje: se enseña el
+      // que sale de verdad, que es lo que se puede comprobar con una regla de tres.
+      percent: miExceso > 0 ? Math.round((comision / miExceso) * 1000) / 10 : 0,
+      partes,
+      comisionCents: comision,
+    });
   }
 
-  const breakdown = [...porTramo.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([percent, t]) => ({
-      concept: `${formatEuro(t.excesoCents)} por encima de gastos × ${fmtPercent(percent)}${
-        t.puntos > 0 ? ` (${fmtPercent(base)} + ${t.puntos})` : ''
-      }`,
+  const breakdown = [...porTramo.values()]
+    .sort((a, b) => a.desde - b.desde)
+    .map((t) => ({
+      concept:
+        t.desde === 0
+          ? `${formatEuro(t.excesoCents)} por encima de gastos × ${fmtPercent(t.percent)}`
+          : `${formatEuro(t.excesoCents)} a partir de ${formatEuro(t.desde)} × ${fmtPercent(
+              t.percent
+            )} (${fmtPercent(base)} + ${t.puntos})`,
       amountCents: t.comisionCents,
     }));
 
@@ -224,6 +285,7 @@ module.exports = {
   getThreshold,
   setThreshold,
   normalizaTramos,
+  comisionEscalonada,
   tramosDe,
   tieneTramosPropios,
   puntosDe,

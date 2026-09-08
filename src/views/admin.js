@@ -606,7 +606,9 @@ function settlementCard(r, { from, to, onlyPending, limites, hoy = '' }) {
             <td class="num small hide-narrow">${money(d.costeCents)}</td>
             <td class="num small">${money(d.mioCents)}</td>
             <td class="num small">${money(d.miExcesoCents)}</td>
-            <td class="num small">${d.miExcesoCents === 0 ? '—' : esc(String(d.percent) + '%')}</td>
+            <td class="num small">${
+              d.miExcesoCents === 0 ? '—' : esc(`${String(d.percent).replace('.', ',')} %`)
+            }</td>
             <td class="num small"><strong>${money(d.comisionCents)}</strong></td>
           </tr>`
             )
@@ -687,8 +689,11 @@ function adminWorkers({ user, flash, warning, workers, retencion, umbral }) {
     <label>La escalera</label>
     <p class="hint" style="margin-top:0">Los puntos se le <strong>suman a su porcentaje</strong>,
        así cada uno conserva el suyo: con +5, una al 40 % pasa al 45 % y otra al 35 % pasa al 40 %.
-       Se mira lo que ha generado <strong>cada uno por encima de los gastos ese día</strong>, y el
-       tramo alcanzado se aplica a todo lo suyo de ese día.</p>
+       Se mira lo que ha generado <strong>cada uno por encima de los gastos ese día</strong>.</p>
+    <p class="hint">Cada tramo cobra su porcentaje <strong>sólo sobre su parte</strong>. Con
+       <em>0 € → +0</em> y <em>200 € → +5</em>, una al 40 % que genere 300 € por encima de gastos
+       cobra 200 € al 40 % y los otros 100 € al 45 %: 125 €. Así, generar un euro más nunca sube el
+       porcentaje de todo lo anterior.</p>
     <div id="umbral-tramos">
       ${umbral.tramos
         .map(
@@ -782,7 +787,7 @@ function adminWorkerForm({ user, flash, warning, worker }) {
     commission_percent: 40,
     fixed_cents: 0,
     tiers_json: '[]',
-    tier_mode: 'total',
+    tier_mode: 'progressive',
     profit_company_percent: 60,
   };
   const tiers = parseTiers(w.tiers_json);
@@ -870,8 +875,11 @@ function adminWorkerForm({ user, flash, warning, worker }) {
         </div>
         <button type="button" class="btn ghost small" id="add-tramo-propio">+ Añadir tramo</button>
         <div class="hint" style="margin-top:8px">Van en <strong>puntos sobre su porcentaje</strong>,
-           no en porcentajes cerrados: con su 40 % y un tramo de +10, ese día cobra el 50 %.
+           no en porcentajes cerrados: con su 40 % y un tramo de +10, esa parte la cobra al 50 %.
            Ejemplo: desde 0 € → +0, desde 200 € → +5, desde 500 € → +10.</div>
+        <div class="hint">Cada tramo cuenta <strong>sólo sobre su parte</strong>: con esa escalera y
+           300 € por encima de gastos, cobra 200 € a su porcentaje de siempre y los otros 100 € con
+           los cinco puntos de más.</div>
       </div>
     </div>
 
@@ -879,9 +887,11 @@ function adminWorkerForm({ user, flash, warning, worker }) {
       <div class="field">
         <label for="tier_mode">Cómo se aplican los tramos</label>
         <select id="tier_mode" name="tier_mode">
+          <option value="progressive" ${w.tier_mode === 'progressive' ? 'selected' : ''}>Cada tramo cobra su % sólo sobre su parte (escalonado)</option>
           <option value="total" ${w.tier_mode === 'total' ? 'selected' : ''}>El % del tramo alcanzado se aplica a TODO lo facturado</option>
-          <option value="progressive" ${w.tier_mode === 'progressive' ? 'selected' : ''}>Cada tramo cobra su % sólo sobre su parte</option>
         </select>
+        <div class="hint">Escalonado es lo normal y lo que hace la escalera del umbral: subir de
+           tramo no cambia el porcentaje de lo anterior.</div>
       </div>
       <label>Tramos</label>
       <div id="tiers">
